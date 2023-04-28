@@ -8,6 +8,7 @@ pub enum FallState {
     Upright,
     Falling { direction: FallDirection },
     Fallen { facing: Facing },
+    StandingUp { facing: Facing },
 }
 
 impl Default for FallState {

@@ -14,6 +14,7 @@ pub struct FallStateEstimation {
     roll_pitch_filter: LowPassFilter<Vector2<f32>>,
     angular_velocity_filter: LowPassFilter<Vector3<f32>>,
     linear_acceleration_filter: LowPassFilter<Vector3<f32>>,
+    last_fall_state: FallState,
 }
 
 #[context]
@@ -63,6 +64,7 @@ impl FallStateEstimation {
                     .fall_state_estimation
                     .linear_acceleration_low_pass_factor,
             ),
+            last_fall_state: FallState::Upright,
         })
     }
 
@@ -166,11 +168,22 @@ impl FallStateEstimation {
                 None
             }
         };
-        let fall_state = match (fallen_direction, falling_direction) {
+        let proposed_fall_state = match (fallen_direction, falling_direction) {
             (Some(facing), _) => FallState::Fallen { facing },
             (None, Some(direction)) => FallState::Falling { direction },
             (None, None) => FallState::Upright,
         };
+        let fall_state = match (self.last_fall_state, proposed_fall_state) {
+            (FallState::Fallen { facing }, FallState::Falling { .. }) => {
+                FallState::StandingUp { facing }
+            }
+            (FallState::StandingUp { facing }, FallState::Falling { .. }) => {
+                FallState::StandingUp { facing }
+            }
+            (_, proposed_fall_state) => proposed_fall_state,
+        };
+
+        self.last_fall_state = fall_state;
 
         Ok(MainOutputs {
             fall_state: fall_state.into(),
