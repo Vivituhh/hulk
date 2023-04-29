@@ -3,7 +3,7 @@ use context_attribute::context;
 use framework::AdditionalOutput;
 use types::{
     hardware::Interface, BodyJointsCommand, HeadJoints, HeadJointsCommand, Joints, JointsCommand,
-    Leds, MotionSelection, MotionType, SensorData,
+    Leds, MotionSelection, MotionType, SensorData, MotionSafeExits,
 };
 
 pub struct JointCommandSender {}
@@ -36,6 +36,9 @@ pub struct CycleContext {
     pub walk_joints_command: Input<BodyJointsCommand<f32>, "walk_joints_command">,
     pub hardware_interface: HardwareInterface,
     pub leds: Input<Leds, "leds">,
+   
+    pub motion_safe_exits: PersistentState<MotionSafeExits, "motion_safe_exits">,
+    pub motion_safe_exits_output: AdditionalOutput<MotionSafeExits, "motion_safe_exits_output">, 
 }
 
 #[context]
@@ -106,6 +109,7 @@ impl JointCommandSender {
             .fill_if_subscribed(|| positions - current_positions);
         context.stiffnesses.fill_if_subscribed(|| stiffnesses);
 
+        context.motion_safe_exits_output.fill_if_subscribed( || context.motion_safe_exits.clone() );
         Ok(MainOutputs {})
     }
 }

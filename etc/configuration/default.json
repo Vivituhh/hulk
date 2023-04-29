@@ -236,6 +236,8 @@
     }
   },
   "fall_protection": {
+    "ground_impact_angular_threshold": 0.9,
+    "ground_impact_body_stiffness": 0.1,
     "ground_impact_head_stiffness": 0.2,
     "left_arm_positions": {
       "shoulder_pitch": 1.57,
@@ -575,6 +577,7 @@
     "angular_velocity_low_pass_factor": 0.2,
     "roll_pitch_low_pass_factor": 0.2,
     "gravitational_acceleration_threshold": 4.0,
+    "fallen_velocity_threshold": 0.01,
     "falling_angle_threshold": [0.52, 0.6],
     "fallen_timeout": {
       "nanos": 0,
