@@ -124,7 +124,7 @@ where
                     Ok(Key::new(
                         time_since_start,
                         frame.positions,
-                        Interpolation::CatmullRom,
+                        Interpolation::Linear,
                     ))
                 })
                 .collect::<Result<Vec<_>, _>>()?,
