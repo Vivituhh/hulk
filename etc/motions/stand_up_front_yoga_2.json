@@ -497,7 +497,7 @@
           "duration": 0.05,
           "positions": {
             "head": {
-              "pitch": 0.5982179641723633,
+              "pitch": -0.5982179641723633,
               "yaw": 0.004559993743896484
             },
             "left_arm": {
@@ -537,7 +537,7 @@
       ],
       "exit_condition": {
         "StabilizedCondition": {
-          "tolerance": 0.5,
+          "tolerance": 0.05,
           "timeout_duration": 3.0
         }
       }
@@ -548,7 +548,7 @@
           "duration": 0.4,
           "positions": {
             "head": {
-              "pitch": 0.0,
+              "pitch": -0.5,
               "yaw": -0.03685808181762695
             },
             "left_arm": {
