@@ -48,7 +48,7 @@ pub struct MainOutputs {
 impl StandUpFront {
     pub fn new(context: CreationContext) -> Result<Self> {
         Ok(Self {
-            interpolator: MotionFile::from_path("etc/motions/stand_up_front_yoga_3.json")?.try_into()?,
+            interpolator: MotionFile::from_path("etc/motions/stand_up_front_yoga_2.json")?.try_into()?,
             filtered_gyro: LowPassFilter::with_smoothing_factor(
                 Vector2::zeros(),
                 *context.gyro_low_pass_filter_coefficient,
