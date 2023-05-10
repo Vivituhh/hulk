@@ -41,7 +41,7 @@
     {
       "keyframes": [
         {
-          "duration": 0.1,
+          "duration": 0.08,
           "positions": {
             "head": {
               "pitch": 0.34664201736450195,
@@ -83,7 +83,7 @@
         },
 
         {
-          "duration": 0.15,
+          "duration": 0.08,
           "positions": {
             "head": {
               "pitch": 0.3711860179901123,
@@ -125,7 +125,7 @@
         },
 
         {
-          "duration": 0.15,
+          "duration": 0.08,
           "positions": {
             "head": {
               "pitch": 0.38345813751220703,
@@ -166,7 +166,7 @@
           }
         },
         {
-          "duration": 0.1,
+          "duration": 0.08,
           "positions": {
             "head": {
               "pitch": 0.35584592819213867,
@@ -371,7 +371,7 @@
           }
         },
         {
-          "duration": 0.3,
+          "duration": 0.2,
           "positions": {
             "head": {
               "pitch": 0.22238802909851071,
@@ -412,7 +412,7 @@
           }
         },
         {
-          "duration": 0.3,
+          "duration": 0.2,
           "positions": {
             "head": {
               "pitch": -0.604438066482544,
@@ -577,7 +577,7 @@
           }
         },
         {
-          "duration": 0.2,
+          "duration": 0.1,
           "positions": {
             "head": {
               "pitch": -0.6888079643249512,
@@ -620,8 +620,8 @@
       ],
       "exit_condition": {
         "StabilizedCondition": {
-          "tolerance": 0.1,
-          "timeout_duration": 3.0
+          "tolerance": -0.1,
+          "timeout_duration": 300.0
         }
       }
     },
