@@ -6,6 +6,7 @@ mod map;
 mod parameter;
 mod plot;
 mod text;
+pub mod center_of_mass_visualization;
 
 pub use self::behavior_simulator::BehaviorSimulatorPanel;
 pub use self::image::ImagePanel;
