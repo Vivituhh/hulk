@@ -511,6 +511,13 @@ pub struct FallProtection {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, SerializeHierarchy)]
+pub struct Jump {
+    pub jump_ground_impact_angular_threshold: f32,
+    pub jump_ground_impact_head_stiffness: f32,
+    pub jump_ground_impact_body_stiffness: f32,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, SerializeHierarchy)]
 pub struct ProjectedLimbs {
     pub torso_bounding_polygon: Vec<Point3<f32>>,
     pub lower_arm_bounding_polygon: Vec<Point3<f32>>,
