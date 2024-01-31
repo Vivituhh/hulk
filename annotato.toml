@@ -4,7 +4,7 @@ rsync_path = "rsync://10.1.24.185/labelparty/output"
 [leaderboard]
 enable = true
 host = "10.1.24.185:3000"
-githubname = ""
+githubname = "Vivituhh"
 
 [keybindings]
 next = { primary = "Space" }
@@ -18,6 +18,6 @@ select_ball = "Num1"
 select_robot = "Num2"
 select_goalpost = "Num3"
 select_penaltyspot = "Num4"
-select_xspot = "Num5"
-select_lspot = "Num6"
-select_tspot = "Num7"
+select_xspot = "X"
+select_lspot = "Num5"
+select_tspot = "T"
