@@ -1,4 +1,4 @@
-use code_generation::{generate, write_to_file::WriteToFile};
+use code_generation::{generate, write_to_file::WriteToFile, Execution};
 use color_eyre::eyre::{Result, WrapErr};
 use source_analyzer::{
     cyclers::{CyclerKind, Cyclers},
@@ -39,17 +39,16 @@ fn main() -> Result<()> {
     };
     let root = "../../crates/";
 
-    let mut cyclers = Cyclers::try_from_manifest(manifest, root)?;
+    let cyclers = Cyclers::try_from_manifest(manifest, root)?;
     for path in cyclers.watch_paths() {
         println!("cargo:rerun-if-changed={}", path.display());
     }
-    cyclers.sort_nodes()?;
 
     println!();
     println!("{}", to_string_pretty(&cyclers)?);
 
     let structs = Structs::try_from_cyclers(&cyclers)?;
-    generate(&cyclers, &structs)
+    generate(&cyclers, &structs, Execution::None)
         .write_to_file("generated_code.rs")
         .wrap_err("failed to write generated code to file")
 }

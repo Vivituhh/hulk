@@ -1,10 +1,10 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet},
     path::Path,
 };
 
 use serde::Deserialize;
-use topological_sort::TopologicalSort;
+use toposort_scc::IndexGraph;
 
 use crate::{
     contexts::Field,
@@ -33,13 +33,6 @@ impl Cyclers {
             .map(|manifest| Cycler::try_from_manifest(manifest, root.as_ref()))
             .collect::<Result<_, _>>()?;
         Ok(Self { cyclers })
-    }
-
-    pub fn sort_nodes(&mut self) -> Result<(), Error> {
-        for cycler in &mut self.cyclers {
-            cycler.sort_nodes()?;
-        }
-        Ok(())
     }
 
     pub fn number_of_instances(&self) -> usize {
@@ -117,25 +110,29 @@ impl Cycler {
             .map(|specification| Node::try_from_node_name(specification, root))
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(Cycler {
+        let mut cycler = Self {
             name: cycler_manifest.name.to_string(),
             kind: cycler_manifest.kind,
             instances,
             setup_nodes,
             cycle_nodes,
-        })
+        };
+        cycler.sort_nodes()?;
+
+        Ok(cycler)
     }
 
-    pub fn sort_nodes(&mut self) -> Result<(), Error> {
-        let output_name_to_setup_node: HashMap<_, _> = self
+    fn sort_nodes(&mut self) -> Result<(), Error> {
+        let output_name_to_setup_node: BTreeMap<_, _> = self
             .setup_nodes
             .iter()
-            .flat_map(|node| {
+            .enumerate()
+            .flat_map(|(node_index, node)| {
                 node.contexts
                     .main_outputs
                     .iter()
                     .filter_map(move |field| match field {
-                        Field::MainOutput { name, .. } => Some((name.to_string(), node)),
+                        Field::MainOutput { name, .. } => Some((name.to_string(), node_index)),
                         _ => None,
                     })
             })
@@ -143,19 +140,20 @@ impl Cycler {
         let sorted_setup_nodes = sort_nodes(
             &self.setup_nodes,
             &output_name_to_setup_node,
-            &HashSet::new(),
+            &BTreeSet::new(),
         )?;
 
         let setup_output_names = output_name_to_setup_node.keys().cloned().collect();
-        let output_to_node: HashMap<_, _> = self
+        let output_to_node: BTreeMap<_, _> = self
             .cycle_nodes
             .iter()
-            .flat_map(|node| {
+            .enumerate()
+            .flat_map(|(node_index, node)| {
                 node.contexts
                     .main_outputs
                     .iter()
                     .filter_map(move |field| match field {
-                        Field::MainOutput { name, .. } => Some((name.to_string(), node)),
+                        Field::MainOutput { name, .. } => Some((name.to_string(), node_index)),
                         _ => None,
                     })
             })
@@ -175,12 +173,11 @@ impl Cycler {
 
 fn sort_nodes(
     nodes: &[Node],
-    output_to_node: &HashMap<String, &Node>,
-    existing_output_names: &HashSet<OutputName>,
+    output_to_node: &BTreeMap<String, usize>,
+    existing_output_names: &BTreeSet<OutputName>,
 ) -> Result<Vec<Node>, Error> {
-    let mut topological_sort = TopologicalSort::<&Node>::new();
-    for node in nodes {
-        topological_sort.insert(node);
+    let mut dependencies = IndexGraph::with_vertices(nodes.len());
+    for (node_index, node) in nodes.iter().enumerate() {
         for dependency in node
             .contexts
             .cycle_context
@@ -203,8 +200,8 @@ fn sort_nodes(
                 _ => None,
             })
         {
-            let producing_node = match output_to_node.get(dependency) {
-                Some(node) => node,
+            let producing_node_index = match output_to_node.get(dependency) {
+                Some(&node_index) => node_index,
                 None if existing_output_names.contains(dependency) => continue,
                 None => {
                     return Err(Error::MissingOutput {
@@ -213,14 +210,17 @@ fn sort_nodes(
                     })
                 }
             };
-            topological_sort.add_dependency(*producing_node, node);
+            dependencies.add_edge(producing_node_index, node_index);
         }
     }
 
-    let sorted_nodes = topological_sort.by_ref().cloned().collect();
-    if !topological_sort.is_empty() {
-        return Err(Error::CircularDependency);
-    }
-
-    Ok(sorted_nodes)
+    dependencies
+        .toposort()
+        .map(|node_indices| {
+            node_indices
+                .into_iter()
+                .map(|node_index| nodes[node_index].clone())
+                .collect()
+        })
+        .ok_or(Error::CircularDependency)
 }

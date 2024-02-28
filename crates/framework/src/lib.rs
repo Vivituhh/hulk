@@ -8,6 +8,7 @@ mod panic;
 mod parameters;
 mod perception_databases;
 mod perception_input;
+mod recording_index;
 
 pub use additional_output::{should_be_filled, AdditionalOutput};
 pub use future_queue::{future_queue, Consumer, Item, Producer, Update, Updates};
@@ -19,3 +20,4 @@ pub use panic::deserialize_not_implemented;
 pub use parameters::Parameters;
 pub use perception_databases::PerceptionDatabases;
 pub use perception_input::PerceptionInput;
+pub use recording_index::{RecordingFrame, RecordingIndex};

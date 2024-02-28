@@ -1,4 +1,4 @@
-use std::{collections::HashSet, iter::once};
+use std::{collections::BTreeSet, iter::once};
 
 use convert_case::{Case, Casing};
 use itertools::Itertools;
@@ -8,40 +8,55 @@ use source_analyzer::{
     contexts::Field,
     cyclers::{Cycler, CyclerKind, Cyclers},
     node::Node,
+    path::Path,
+};
+use syn::{
+    AngleBracketedGenericArguments, GenericArgument, Path as SynPath, PathArguments, Type, TypePath,
 };
 
-use crate::accessor::{path_to_accessor_token_stream, ReferenceKind};
+use crate::{
+    accessor::{path_to_accessor_token_stream, ReferenceKind},
+    Execution,
+};
 
-pub fn generate_cyclers(cyclers: &Cyclers) -> TokenStream {
-    let recording_frame_variants = cyclers.instances().map(|(_cycler, instance)| {
-        let instance_name = format_ident!("{}", instance);
+pub fn generate_cyclers(cyclers: &Cyclers, mode: Execution) -> TokenStream {
+    let recording_frame = if mode == Execution::Run {
+        let recording_frame_variants = cyclers.instances().map(|(_cycler, instance)| {
+            let instance_name = format_ident!("{}", instance);
+            quote! {
+                #instance_name {
+                    timestamp: std::time::SystemTime,
+                    data: std::vec::Vec<u8>,
+                },
+            }
+        });
         quote! {
-            #instance_name {
-                data: std::vec::Vec<u8>,
-            },
+            pub enum RecordingFrame {
+                #(#recording_frame_variants)*
+            }
         }
-    });
+    } else {
+        Default::default()
+    };
     let cyclers: Vec<_> = cyclers
         .cyclers
         .iter()
-        .map(|cycler| generate_module(cycler, cyclers))
+        .map(|cycler| generate_module(cycler, cyclers, mode))
         .collect();
 
     quote! {
-        pub enum RecordingFrame {
-            #(#recording_frame_variants)*
-        }
+        #recording_frame
 
         #(#cyclers)*
     }
 }
 
-fn generate_module(cycler: &Cycler, cyclers: &Cyclers) -> TokenStream {
+fn generate_module(cycler: &Cycler, cyclers: &Cyclers, mode: Execution) -> TokenStream {
     let module_name = format_ident!("{}", cycler.name.to_case(Case::Snake));
     let cycler_instance = generate_cycler_instance(cycler);
     let database_struct = generate_database_struct();
-    let cycler_struct = generate_struct(cycler, cyclers);
-    let cycler_implementation = generate_implementation(cycler, cyclers);
+    let cycler_struct = generate_struct(cycler, cyclers, mode);
+    let cycler_implementation = generate_implementation(cycler, cyclers, mode);
 
     quote! {
         #[allow(dead_code, unused_mut, unused_variables, clippy::too_many_arguments, clippy::needless_question_mark, clippy::borrow_deref_ref)]
@@ -80,7 +95,7 @@ fn generate_database_struct() -> TokenStream {
     }
 }
 
-fn generate_struct(cycler: &Cycler, cyclers: &Cyclers) -> TokenStream {
+fn generate_struct(cycler: &Cycler, cyclers: &Cyclers, mode: Execution) -> TokenStream {
     let module_name = format_ident!("{}", cycler.name.to_case(Case::Snake));
     let input_output_fields = generate_input_output_fields(cycler, cyclers);
     let realtime_inputs = match cycler.kind {
@@ -93,6 +108,14 @@ fn generate_struct(cycler: &Cycler, cyclers: &Cyclers) -> TokenStream {
         }
     };
     let node_fields = generate_node_fields(cycler);
+    let recording_fields = if mode == Execution::Run {
+        quote! {
+            recording_sender: std::sync::mpsc::SyncSender<crate::cyclers::RecordingFrame>,
+            enable_recording: bool,
+        }
+    } else {
+        Default::default()
+    };
 
     quote! {
         pub(crate) struct Cycler<HardwareInterface>  {
@@ -106,8 +129,7 @@ fn generate_struct(cycler: &Cycler, cyclers: &Cyclers) -> TokenStream {
             #realtime_inputs
             #input_output_fields
             #node_fields
-            recording_sender: std::sync::mpsc::SyncSender<crate::cyclers::RecordingFrame>,
-            enable_recording: bool,
+            #recording_fields
         }
     }
 }
@@ -175,10 +197,13 @@ fn generate_node_fields(cycler: &Cycler) -> TokenStream {
     }
 }
 
-fn generate_implementation(cycler: &Cycler, cyclers: &Cyclers) -> TokenStream {
-    let new_method = generate_new_method(cycler, cyclers);
-    let start_method = generate_start_method();
-    let cycle_method = generate_cycle_method(cycler, cyclers);
+fn generate_implementation(cycler: &Cycler, cyclers: &Cyclers, mode: Execution) -> TokenStream {
+    let new_method = generate_new_method(cycler, cyclers, mode);
+    let start_method = match mode {
+        Execution::None | Execution::Run => generate_start_method(),
+        Execution::Replay => Default::default(),
+    };
+    let cycle_method = generate_cycle_method(cycler, cyclers, mode);
 
     quote! {
         impl<HardwareInterface> Cycler<HardwareInterface>
@@ -192,7 +217,7 @@ fn generate_implementation(cycler: &Cycler, cyclers: &Cyclers) -> TokenStream {
     }
 }
 
-fn generate_new_method(cycler: &Cycler, cyclers: &Cyclers) -> TokenStream {
+fn generate_new_method(cycler: &Cycler, cyclers: &Cyclers, mode: Execution) -> TokenStream {
     let input_output_fields = generate_input_output_fields(cycler, cyclers);
     let cycler_module_name = format_ident!("{}", cycler.name.to_case(Case::Snake));
     let node_initializers = generate_node_initializers(cycler);
@@ -200,6 +225,22 @@ fn generate_new_method(cycler: &Cycler, cyclers: &Cyclers) -> TokenStream {
         .iter_nodes()
         .map(|node| format_ident!("{}", node.name.to_case(Case::Snake)));
     let input_output_identifiers = generate_input_output_identifiers(cycler, cyclers);
+    let recording_parameter_fields = if mode == Execution::Run {
+        quote! {
+            recording_sender: std::sync::mpsc::SyncSender<crate::cyclers::RecordingFrame>,
+            enable_recording: bool,
+        }
+    } else {
+        Default::default()
+    };
+    let recording_initializer_fields = if mode == Execution::Run {
+        quote! {
+            recording_sender,
+            enable_recording,
+        }
+    } else {
+        Default::default()
+    };
 
     quote! {
         pub(crate) fn new(
@@ -210,8 +251,7 @@ fn generate_new_method(cycler: &Cycler, cyclers: &Cyclers) -> TokenStream {
             own_subscribed_outputs_reader: framework::Reader<std::collections::HashSet<String>>,
             parameters_reader: framework::Reader<crate::structs::Parameters>,
             #input_output_fields
-            recording_sender: std::sync::mpsc::SyncSender<crate::cyclers::RecordingFrame>,
-            enable_recording: bool,
+            #recording_parameter_fields
         ) -> color_eyre::Result<Self> {
             let parameters = parameters_reader.next().clone();
             let mut cycler_state = crate::structs::#cycler_module_name::CyclerState::default();
@@ -226,8 +266,7 @@ fn generate_new_method(cycler: &Cycler, cyclers: &Cyclers) -> TokenStream {
                 cycler_state,
                 #input_output_identifiers
                 #(#node_identifiers,)*
-                recording_sender,
-                enable_recording,
+                #recording_initializer_fields
             })
         }
     }
@@ -367,33 +406,58 @@ fn generate_start_method() -> TokenStream {
     }
 }
 
-fn generate_cycle_method(cycler: &Cycler, cyclers: &Cyclers) -> TokenStream {
+fn generate_cycle_method(cycler: &Cycler, cyclers: &Cyclers, mode: Execution) -> TokenStream {
+    let cycle_function_signature = match mode {
+        Execution::None | Execution::Run => quote! {
+            pub(crate) fn cycle(&mut self) -> color_eyre::Result<()>
+        },
+        Execution::Replay => quote! {
+            pub fn cycle(&mut self, now: std::time::SystemTime, mut recording_frame: &[u8]) -> color_eyre::Result<()>
+        },
+    };
     let setup_node_executions = cycler
         .setup_nodes
         .iter()
-        .map(|node| generate_node_execution(node, cycler, RecordingGeneration::Generate));
+        .map(|node| generate_node_execution(node, cycler, NodeType::Setup, mode));
     let cycle_node_executions = cycler
         .cycle_nodes
         .iter()
-        .map(|node| generate_node_execution(node, cycler, RecordingGeneration::Skip));
-    let cross_inputs = get_cross_inputs(cycler);
-    let cross_input_recordings = generate_cross_inputs_recording(cycler, cross_inputs);
+        .map(|node| generate_node_execution(node, cycler, NodeType::Cycle, mode));
+    let cross_input_fields = get_cross_input_fields(cycler);
+    let cross_inputs = match mode {
+        Execution::None => Default::default(),
+        Execution::Run => generate_cross_inputs_recording(cycler, cross_input_fields),
+        Execution::Replay => generate_cross_inputs_extraction(cross_input_fields),
+    };
 
+    let pre_setup = match mode {
+        Execution::None => Default::default(),
+        Execution::Run => quote! {
+            let enable_recording = self.enable_recording && self.hardware_interface.should_record();
+            let mut recording_frame = Vec::new(); // TODO: possible optimization: cache capacity
+        },
+        Execution::Replay => Default::default(),
+    };
+    let post_setup = match mode {
+        Execution::None => Default::default(),
+        Execution::Run => quote! {
+            let now = <HardwareInterface as hardware::TimeInterface>::get_now(&*self.hardware_interface);
+        },
+        Execution::Replay => Default::default(),
+    };
     let post_setup = match cycler.kind {
         CyclerKind::Perception => quote! {
+            #post_setup
             self.own_producer.announce();
         },
         CyclerKind::RealTime => {
             let perception_cycler_updates = generate_perception_cycler_updates(cyclers);
 
             quote! {
-                let now = <HardwareInterface as hardware::TimeInterface>::get_now(&*self.hardware_interface);
+                #post_setup
                 self.perception_databases.update(now, crate::perception_databases::Updates {
                     #perception_cycler_updates
                 });
-                if enable_recording {
-                    bincode::serialize_into(&mut recording_frame, &now).wrap_err("failed to record time")?;
-                }
             }
         }
     };
@@ -423,16 +487,35 @@ fn generate_cycle_method(cycler: &Cycler, cyclers: &Cyclers) -> TokenStream {
             );
         },
     };
-    let recording_variants = cycler.instances.iter().map(|instance| {
-        let instance_name = format_ident!("{}", instance);
-        quote! {
-            CyclerInstance::#instance_name => crate::cyclers::RecordingFrame::#instance_name { data: recording_frame },
+    let after_remaining_nodes = match mode {
+        Execution::None => after_remaining_nodes,
+        Execution::Run => {
+            let recording_variants = cycler.instances.iter().map(|instance| {
+                let instance_name = format_ident!("{}", instance);
+                quote! {
+                    CyclerInstance::#instance_name => crate::cyclers::RecordingFrame::#instance_name {
+                        timestamp: now,
+                        data: recording_frame,
+                    },
+                }
+            });
+
+            quote! {
+                #after_remaining_nodes
+
+                if enable_recording {
+                    self.recording_sender.try_send(match instance {
+                        #(#recording_variants)*
+                    }).wrap_err("failed to send recording frame")?;
+                }
+            }
         }
-    });
+        Execution::Replay => after_remaining_nodes,
+    };
 
     quote! {
         #[allow(clippy::nonminimal_bool)]
-        pub(crate) fn cycle(&mut self) -> color_eyre::Result<()> {
+        #cycle_function_signature {
             {
                 let instance = self.instance;
                 let instance_name = format!("{instance:?}");
@@ -444,8 +527,7 @@ fn generate_cycle_method(cycler: &Cycler, cyclers: &Cyclers) -> TokenStream {
                     own_database.deref_mut()
                 };
 
-                let enable_recording = self.enable_recording && self.hardware_interface.should_record();
-                let mut recording_frame = Vec::new(); // TODO: possible optimization: cache capacity
+                #pre_setup
 
                 {
                     let own_subscribed_outputs = self.own_subscribed_outputs_reader.next();
@@ -459,17 +541,11 @@ fn generate_cycle_method(cycler: &Cycler, cyclers: &Cyclers) -> TokenStream {
                     let own_subscribed_outputs = self.own_subscribed_outputs_reader.next();
                     let parameters = self.parameters_reader.next();
                     #lock_readers
-                    #cross_input_recordings
+                    #cross_inputs
                     #(#cycle_node_executions)*
                 }
 
                 #after_remaining_nodes
-
-                if enable_recording {
-                    self.recording_sender.try_send(match instance {
-                        #(#recording_variants)*
-                    }).wrap_err("failed to send recording frame")?;
-                }
             }
             self.own_changed.notify_one();
             Ok(())
@@ -477,7 +553,7 @@ fn generate_cycle_method(cycler: &Cycler, cyclers: &Cyclers) -> TokenStream {
     }
 }
 
-fn get_cross_inputs(cycler: &Cycler) -> HashSet<Field> {
+fn get_cross_input_fields(cycler: &Cycler) -> BTreeSet<Field> {
     cycler
         .setup_nodes
         .iter()
@@ -490,6 +566,7 @@ fn get_cross_inputs(cycler: &Cycler) -> HashSet<Field> {
                     matches!(
                         field,
                         Field::CyclerState { .. }
+                            | Field::HistoricInput { .. }
                             | Field::Input {
                                 cycler_instance: Some(_),
                                 ..
@@ -513,6 +590,7 @@ fn generate_cross_inputs_recording(
     let recordings = cross_inputs.into_iter().map(|field| {
         let error_message = match &field {
             Field::CyclerState { name, .. } => format!("failed to record cycler state {name}"),
+            Field::HistoricInput { name, .. } => format!("failed to record historic input {name}"),
             Field::Input { cycler_instance: Some(_), name, .. } => format!("failed to record input {name}"),
             Field::PerceptionInput { name, .. } => format!("failed to record perception input {name}"),
             Field::RequiredInput { cycler_instance: Some(_), name, .. } => format!("failed to record required input {name}"),
@@ -528,6 +606,35 @@ fn generate_cross_inputs_recording(
                 );
                 quote! {
                     #accessor
+                }
+            }
+            Field::HistoricInput { path, .. } => {
+                let now_accessor = path_to_accessor_token_stream(
+                    quote!{ own_database_reference.main_outputs },
+                    &path,
+                    ReferenceKind::Immutable,
+                    cycler,
+                );
+                let historic_accessor = path_to_accessor_token_stream(
+                    quote!{ database },
+                    &path,
+                    ReferenceKind::Immutable,
+                    cycler,
+                );
+                quote! {
+                    &[(now, #now_accessor)]
+                        .into_iter()
+                        .chain(
+                            self
+                                .historic_databases
+                                .databases
+                                .iter()
+                                .map(|(system_time, database)| (
+                                    *system_time,
+                                    #historic_accessor,
+                                ))
+                        )
+                        .collect::<std::collections::BTreeMap<_, _>>()
                 }
             }
             Field::Input {
@@ -622,6 +729,96 @@ fn generate_cross_inputs_recording(
     }
 }
 
+fn generate_cross_inputs_extraction(cross_inputs: impl IntoIterator<Item = Field>) -> TokenStream {
+    let extractions = cross_inputs.into_iter().map(|field| {
+        let error_message = match &field {
+            Field::CyclerState { name, .. } => format!("failed to record cycler state {name}"),
+            Field::HistoricInput { name, .. } => format!("failed to record historic input {name}"),
+            Field::Input { cycler_instance: Some(_), name, .. } => format!("failed to record input {name}"),
+            Field::PerceptionInput { name, .. } => format!("failed to record perception input {name}"),
+            Field::RequiredInput { cycler_instance: Some(_), name, .. } => format!("failed to record required input {name}"),
+            _ => panic!("unexpected field {field:?}"),
+        };
+        match field {
+            Field::CyclerState { path, .. } => {
+                let name = path_to_extraction_variable_name("own", &path, "cycler_state");
+                quote! {
+                    #[allow(non_snake_case)]
+                    let mut #name = bincode::deserialize_from(&mut recording_frame).wrap_err(#error_message)?;
+                }
+            }
+            Field::HistoricInput { path, data_type, .. } => {
+                let name = path_to_extraction_variable_name("own", &path, "historic_input");
+                quote! {
+                    #[allow(non_snake_case)]
+                    let #name: std::collections::BTreeMap<std::time::SystemTime, #data_type> = bincode::deserialize_from(&mut recording_frame).wrap_err(#error_message)?;
+                }
+            }
+            Field::Input {
+                cycler_instance: Some(cycler_instance),
+                path,
+                data_type,
+                ..
+            } => {
+                let name = path_to_extraction_variable_name(&cycler_instance, &path, "input");
+                quote! {
+                    #[allow(non_snake_case)]
+                    let #name: #data_type = bincode::deserialize_from(&mut recording_frame).wrap_err(#error_message)?;
+                }
+            }
+            Field::PerceptionInput { cycler_instance, path, data_type, .. } => {
+                let name = path_to_extraction_variable_name(&cycler_instance, &path, "perception_input");
+                quote! {
+                    #[allow(non_snake_case)]
+                    let #name: [std::collections::BTreeMap<std::time::SystemTime, Vec<#data_type>>; 2] = bincode::deserialize_from(&mut recording_frame).wrap_err(#error_message)?;
+                }
+            }
+            Field::RequiredInput {
+                cycler_instance: Some(cycler_instance),
+                path,
+                data_type: Type::Path(TypePath {
+                    path: SynPath { segments, .. },
+                    ..
+                }),
+                ..
+            } if !segments.is_empty() && segments.last().unwrap().ident == "Option" => {
+                let name = path_to_extraction_variable_name(&cycler_instance, &path, "required_input");
+                let data_type = match &segments.last().unwrap().arguments {
+                    PathArguments::AngleBracketed(AngleBracketedGenericArguments {
+                        args, ..
+                    }) if args.len() == 1 => match args.first().unwrap() {
+                        GenericArgument::Type(nested_data_type) => nested_data_type,
+                        _ => panic!("unexpected generic argument, expected type argument in data type"),
+                    },
+                    _ => panic!("expected exactly one generic type argument in data type"),
+                };
+                quote! {
+                    #[allow(non_snake_case)]
+                    let #name: #data_type = bincode::deserialize_from(&mut recording_frame).wrap_err(#error_message)?;
+                }
+            }
+            _ => panic!("unexpected field {field:?}"),
+        }
+    }).collect::<Vec<_>>();
+
+    if extractions.is_empty() {
+        return Default::default();
+    }
+
+    quote! {
+        #(#extractions)*
+    }
+}
+
+fn path_to_extraction_variable_name(cycler_instance: &str, path: &Path, suffix: &str) -> Ident {
+    format_ident!(
+        "replay_extraction_{}_{}_{}",
+        cycler_instance,
+        path.to_segments().join("_"),
+        suffix,
+    )
+}
+
 fn generate_perception_cycler_updates(cyclers: &Cyclers) -> TokenStream {
     cyclers
         .instances_with(CyclerKind::Perception)
@@ -638,22 +835,63 @@ fn generate_perception_cycler_updates(cyclers: &Cyclers) -> TokenStream {
 fn generate_node_execution(
     node: &Node,
     cycler: &Cycler,
-    recording_generation: RecordingGeneration,
+    node_type: NodeType,
+    mode: Execution,
+) -> TokenStream {
+    match (node_type, mode) {
+        (NodeType::Setup, Execution::Run) => {
+            let write_main_outputs_from_node =
+                generate_write_main_outputs_from_node(node, cycler, mode);
+            let record_main_outputs = generate_record_main_outputs(node);
+            quote! {
+                #write_main_outputs_from_node
+                #record_main_outputs
+            }
+        }
+        (NodeType::Cycle, Execution::Run) => {
+            let record_node_state = generate_record_node_state(node);
+            let write_main_outputs_from_node =
+                generate_write_main_outputs_from_node(node, cycler, mode);
+            quote! {
+                #record_node_state
+                #write_main_outputs_from_node
+            }
+        }
+        (NodeType::Setup, Execution::Replay) => {
+            let write_main_outputs_from_frame = generate_write_main_outputs_from_frame(node);
+            quote! {
+                #write_main_outputs_from_frame
+            }
+        }
+        (NodeType::Cycle, Execution::Replay) => {
+            let restore_node_state = generate_restore_node_state(node);
+            let write_main_outputs_from_node =
+                generate_write_main_outputs_from_node(node, cycler, mode);
+            quote! {
+                #restore_node_state
+                #write_main_outputs_from_node
+            }
+        }
+        (_, Execution::None) => panic!("unexpected Execution::Mode"),
+    }
+}
+
+fn generate_write_main_outputs_from_node(
+    node: &Node,
+    cycler: &Cycler,
+    mode: Execution,
 ) -> TokenStream {
     let are_required_inputs_some = generate_required_input_condition(node, cycler);
     let node_name = &node.name;
-    let node_module = &node.module;
     let node_member = format_ident!("{}", node.name.to_case(Case::Snake));
-    let context_initializers = generate_context_initializers(node, cycler);
-    let recording_error_message = format!("failed to record `{}`", node.name);
+    let node_module = &node.module;
+    let context_initializers = generate_context_initializers(node, cycler, mode);
     let cycle_error_message = format!("failed to execute cycle of `{}`", node.name);
-    let database_updates = generate_database_updates(node, recording_generation);
+    let database_updates = generate_database_updates(node);
     let database_updates_from_defaults = generate_database_updates_from_defaults(node);
+
     quote! {
         {
-            if enable_recording {
-                bincode::serialize_into(&mut recording_frame, &self.#node_member).wrap_err(#recording_error_message)?;
-            }
             #[allow(clippy::needless_else)]
             if #are_required_inputs_some {
                 let main_outputs = {
@@ -674,9 +912,73 @@ fn generate_node_execution(
     }
 }
 
-enum RecordingGeneration {
-    Generate,
-    Skip,
+fn generate_record_main_outputs(node: &Node) -> TokenStream {
+    node.contexts
+        .main_outputs
+        .iter()
+        .filter_map(|field| match field {
+            Field::MainOutput { name, .. } => {
+                let error_message = format!("failed to record {name}");
+                Some(quote! {
+                    if enable_recording {
+                        bincode::serialize_into(&mut recording_frame, &own_database_reference.main_outputs.#name).wrap_err(#error_message)?;
+                    }
+                })
+            },
+            _ => None,
+        })
+        .collect()
+}
+
+fn generate_record_node_state(node: &Node) -> TokenStream {
+    let node_member = format_ident!("{}", node.name.to_case(Case::Snake));
+    let error_message = format!("failed to record `{}`", node.name);
+    quote! {
+        if enable_recording {
+            bincode::serialize_into(&mut recording_frame, &self.#node_member).wrap_err(#error_message)?;
+        }
+    }
+}
+
+fn generate_write_main_outputs_from_frame(node: &Node) -> TokenStream {
+    node.contexts
+        .main_outputs
+        .iter()
+        .filter_map(|field| match field {
+            Field::MainOutput { name, .. } => {
+                let error_message = format!("failed to extract {name}");
+                Some(quote! {
+                    own_database_reference.main_outputs.#name = bincode::deserialize_from(&mut recording_frame).wrap_err(#error_message)?;
+                })
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+fn generate_restore_node_state(node: &Node) -> TokenStream {
+    let node_member = format_ident!("{}", node.name.to_case(Case::Snake));
+    let error_message = format!("failed to extract `{}`", node.name);
+    quote! {
+        {
+            use bincode::Options;
+            let mut deserializer = bincode::Deserializer::with_reader(
+                &mut recording_frame,
+                bincode::options()
+                    .with_fixint_encoding()
+                    .allow_trailing_bytes(),
+            );
+            serde::Deserialize::deserialize_in_place(
+                &mut deserializer,
+                &mut self.#node_member,
+            ).wrap_err(#error_message)?;
+        }
+    }
+}
+
+enum NodeType {
+    Setup,
+    Cycle,
 }
 
 fn generate_required_input_condition(node: &Node, cycler: &Cycler) -> TokenStream {
@@ -718,7 +1020,7 @@ fn generate_required_input_condition(node: &Node, cycler: &Cycler) -> TokenStrea
     }
 }
 
-fn generate_context_initializers(node: &Node, cycler: &Cycler) -> TokenStream {
+fn generate_context_initializers(node: &Node, cycler: &Cycler, mode: Execution) -> TokenStream {
     let initializers = node
             .contexts
             .cycle_context
@@ -744,72 +1046,141 @@ fn generate_context_initializers(node: &Node, cycler: &Cycler) -> TokenStream {
                     }
                 }
                 Field::CyclerState { path, .. } => {
-                    let accessor = path_to_accessor_token_stream(
-                        quote! { self.cycler_state },
-                        path,
-                        ReferenceKind::Mutable,
-                        cycler,
-                    );
-                    quote! {
-                        #accessor
+                    match mode {
+                        Execution::None => Default::default(),
+                        Execution::Run => {
+                            let accessor = path_to_accessor_token_stream(
+                                quote! { self.cycler_state },
+                                path,
+                                ReferenceKind::Mutable,
+                                cycler,
+                            );
+                            quote! {
+                                #accessor
+                            }
+                        },
+                        Execution::Replay => {
+                            let name = path_to_extraction_variable_name("own", path, "cycler_state");
+                            quote! {
+                                &mut #name
+                            }
+                        },
                     }
                 }
                 Field::HardwareInterface { .. } => quote! {
                     &self.hardware_interface
                 },
-                Field::HistoricInput { path, .. } => {
-                    let now_accessor = path_to_accessor_token_stream(
-                        quote!{ own_database_reference.main_outputs },
-                        path,
-                        ReferenceKind::Immutable,
-                        cycler,
-                    );
-                    let historic_accessor = path_to_accessor_token_stream(
-                        quote!{ database },
-                        path,
-                        ReferenceKind::Immutable,
-                        cycler,
-                    );
-                    quote! {
-                        [(now, #now_accessor)]
-                            .into_iter()
-                            .chain(
-                                self
-                                    .historic_databases
-                                    .databases
-                                    .iter()
-                                    .map(|(system_time, database)| (
-                                        *system_time,
-                                        #historic_accessor,
-                                    ))
-                            )
-                            .collect::<std::collections::BTreeMap<_, _>>()
-                            .into()
+                Field::HistoricInput { path, data_type, .. } => {
+                    match mode {
+                        Execution::None => Default::default(),
+                        Execution::Run => {
+                            let now_accessor = path_to_accessor_token_stream(
+                                quote!{ own_database_reference.main_outputs },
+                                path,
+                                ReferenceKind::Immutable,
+                                cycler,
+                            );
+                            let historic_accessor = path_to_accessor_token_stream(
+                                quote!{ database },
+                                path,
+                                ReferenceKind::Immutable,
+                                cycler,
+                            );
+                            quote! {
+                                [(now, #now_accessor)]
+                                    .into_iter()
+                                    .chain(
+                                        self
+                                            .historic_databases
+                                            .databases
+                                            .iter()
+                                            .map(|(system_time, database)| (
+                                                *system_time,
+                                                #historic_accessor,
+                                            ))
+                                    )
+                                    .collect::<std::collections::BTreeMap<_, _>>()
+                                    .into()
+                            }
+                        },
+                        Execution::Replay => {
+                            let name = path_to_extraction_variable_name("own", path, "historic_input");
+                            let is_option = match data_type {
+                                Type::Path(TypePath {
+                                    path: SynPath { segments, .. },
+                                    ..
+                                }) => !segments.is_empty() && segments.last().unwrap().ident == "Option",
+                                _ => false,
+                            };
+                            if is_option {
+                                quote! {
+                                    #name.iter().map(|(key, option_value)| (*key, option_value.as_ref())).collect::<std::collections::BTreeMap<_, _>>().into()
+                                }
+                            } else {
+                                quote! {
+                                    #name.iter().map(|(key, option_value)| (*key, option_value)).collect::<std::collections::BTreeMap<_, _>>().into()
+                                }
+                            }
+                        },
                     }
                 }
                 Field::Input {
                     cycler_instance,
                     path,
+                    data_type,
                     ..
                 } => {
-                    let database_prefix = match cycler_instance {
+                    match cycler_instance {
                         Some(cycler_instance) => {
-                            let identifier =
-                                format_ident!("{}_database", cycler_instance.to_case(Case::Snake));
-                            quote! { #identifier.main_outputs }
+                            match mode {
+                                Execution::None => Default::default(),
+                                Execution::Run => {
+                                    let identifier =
+                                        format_ident!("{}_database", cycler_instance.to_case(Case::Snake));
+                                    let database_prefix = quote! { #identifier.main_outputs };
+                                    let accessor = path_to_accessor_token_stream(
+                                        database_prefix,
+                                        path,
+                                        ReferenceKind::Immutable,
+                                        cycler,
+                                    );
+                                    quote! {
+                                        #accessor
+                                    }
+                                },
+                                Execution::Replay => {
+                                    let name = path_to_extraction_variable_name(cycler_instance, path, "input");
+                                    let is_option = match data_type {
+                                        Type::Path(TypePath {
+                                            path: SynPath { segments, .. },
+                                            ..
+                                        }) => !segments.is_empty() && segments.last().unwrap().ident == "Option",
+                                        _ => false,
+                                    };
+                                    if is_option {
+                                        quote! {
+                                            #name.as_ref()
+                                        }
+                                    } else {
+                                        quote! {
+                                            &#name
+                                        }
+                                    }
+                                },
+                            }
                         }
                         None => {
-                            quote! { own_database_reference.main_outputs }
+                            let database_prefix = quote! { own_database_reference.main_outputs };
+                            let accessor = path_to_accessor_token_stream(
+                                database_prefix,
+                                path,
+                                ReferenceKind::Immutable,
+                                cycler,
+                            );
+                            quote! {
+                                #accessor
+                            }
                         }
-                    };
-                    let accessor = path_to_accessor_token_stream(
-                        database_prefix,
-                        path,
-                        ReferenceKind::Immutable,
-                        cycler,
-                    );
-                    quote! {
-                        #accessor
                     }
                 }
                 Field::MainOutput { name, .. } => {
@@ -829,45 +1200,82 @@ fn generate_context_initializers(node: &Node, cycler: &Cycler) -> TokenStream {
                 Field::PerceptionInput {
                     cycler_instance,
                     path,
+                    data_type,
                     ..
                 } => {
-                    let cycler_instance_identifier =
-                        format_ident!("{}", cycler_instance.to_case(Case::Snake));
-                    let accessor = path_to_accessor_token_stream(
-                        quote! { database },
-                        path,
-                        ReferenceKind::Immutable,
-                        cycler,
-                    );
-                    quote! {
-                        framework::PerceptionInput {
-                            persistent: self
-                                .perception_databases
-                                .persistent()
-                                .map(|(system_time, databases)| (
-                                    *system_time,
-                                    databases
-                                        .#cycler_instance_identifier
-                                        .iter()
-                                        .map(|database| #accessor)
-                                        .collect()
-                                    ,
-                                ))
-                                .collect(),
-                            temporary: self
-                                .perception_databases
-                                .temporary()
-                                .map(|(system_time, databases)| (
-                                    *system_time,
-                                    databases
-                                        .#cycler_instance_identifier
-                                        .iter()
-                                        .map(|database| #accessor)
-                                        .collect()
-                                    ,
-                                ))
-                                .collect(),
-                        }
+                    match mode {
+                        Execution::None => Default::default(),
+                        Execution::Run => {
+                            let cycler_instance_identifier =
+                                format_ident!("{}", cycler_instance.to_case(Case::Snake));
+                            let accessor = path_to_accessor_token_stream(
+                                quote! { database },
+                                path,
+                                ReferenceKind::Immutable,
+                                cycler,
+                            );
+                            quote! {
+                                framework::PerceptionInput {
+                                    persistent: self
+                                        .perception_databases
+                                        .persistent()
+                                        .map(|(system_time, databases)| (
+                                            *system_time,
+                                            databases
+                                                .#cycler_instance_identifier
+                                                .iter()
+                                                .map(|database| #accessor)
+                                                .collect()
+                                            ,
+                                        ))
+                                        .collect(),
+                                    temporary: self
+                                        .perception_databases
+                                        .temporary()
+                                        .map(|(system_time, databases)| (
+                                            *system_time,
+                                            databases
+                                                .#cycler_instance_identifier
+                                                .iter()
+                                                .map(|database| #accessor)
+                                                .collect()
+                                            ,
+                                        ))
+                                        .collect(),
+                                }
+                            }
+                        },
+                        Execution::Replay => {
+                            let name = path_to_extraction_variable_name(cycler_instance, path, "perception_input");
+                            let is_option = match data_type {
+                                Type::Path(TypePath {
+                                    path: SynPath { segments, .. },
+                                    ..
+                                }) => !segments.is_empty() && segments.last().unwrap().ident == "Option",
+                                _ => false,
+                            };
+                            let map_operation = if is_option {
+                                quote! {
+                                    values.iter().map(|option_value| option_value.as_ref()).collect()
+                                }
+                            } else {
+                                quote! {
+                                    values.iter().collect()
+                                }
+                            };
+                            quote! {
+                                framework::PerceptionInput {
+                                    persistent: #name[0].iter().map(|(system_time, values)| (
+                                        *system_time,
+                                        #map_operation,
+                                    )).collect(),
+                                    temporary: #name[1].iter().map(|(system_time, values)| (
+                                        *system_time,
+                                        #map_operation,
+                                    )).collect(),
+                                }
+                            }
+                        },
                     }
                 }
                 Field::RequiredInput {
@@ -875,24 +1283,44 @@ fn generate_context_initializers(node: &Node, cycler: &Cycler) -> TokenStream {
                     path,
                     ..
                 } => {
-                    let database_prefix = match cycler_instance {
+                    match cycler_instance {
                         Some(cycler_instance) => {
-                            let identifier =
-                                format_ident!("{}_database", cycler_instance.to_case(Case::Snake));
-                            quote! { #identifier.main_outputs }
+                            match mode {
+                                Execution::None => Default::default(),
+                                Execution::Run => {
+                                    let identifier =
+                                        format_ident!("{}_database", cycler_instance.to_case(Case::Snake));
+                                    let database_prefix = quote! { #identifier.main_outputs };
+                                    let accessor = path_to_accessor_token_stream(
+                                        database_prefix,
+                                        path,
+                                        ReferenceKind::Immutable,
+                                        cycler,
+                                    );
+                                    quote! {
+                                        #accessor .unwrap()
+                                    }
+                                },
+                                Execution::Replay => {
+                                    let name = path_to_extraction_variable_name(cycler_instance, path, "required_input");
+                                    quote! {
+                                        &#name
+                                    }
+                                },
+                            }
                         }
                         None => {
-                            quote! { own_database_reference.main_outputs }
+                            let database_prefix = quote! { own_database_reference.main_outputs };
+                            let accessor = path_to_accessor_token_stream(
+                                database_prefix,
+                                path,
+                                ReferenceKind::Immutable,
+                                cycler,
+                            );
+                            quote! {
+                                #accessor .unwrap()
+                            }
                         }
-                    };
-                    let accessor = path_to_accessor_token_stream(
-                        database_prefix,
-                        path,
-                        ReferenceKind::Immutable,
-                        cycler,
-                    );
-                    quote! {
-                        #accessor .unwrap()
                     }
                 }
             });
@@ -901,30 +1329,14 @@ fn generate_context_initializers(node: &Node, cycler: &Cycler) -> TokenStream {
     }
 }
 
-fn generate_database_updates(
-    node: &Node,
-    recording_generation: RecordingGeneration,
-) -> TokenStream {
+fn generate_database_updates(node: &Node) -> TokenStream {
     node.contexts
         .main_outputs
         .iter()
         .filter_map(|field| match field {
-            Field::MainOutput { name, .. } => {
-                let error_message = format!("failed to record {name}");
-                let recording_serialization = match recording_generation {
-                    RecordingGeneration::Generate => quote! {
-                        if enable_recording {
-                            bincode::serialize_into(&mut recording_frame, &main_outputs.#name.value).wrap_err(#error_message)?;
-                        }
-                    },
-                    RecordingGeneration::Skip => Default::default(),
-                };
-                let setter = quote! {
-                    #recording_serialization
-                    own_database_reference.main_outputs.#name = main_outputs.#name.value;
-                };
-                Some(setter)
-            }
+            Field::MainOutput { name, .. } => Some(quote! {
+                own_database_reference.main_outputs.#name = main_outputs.#name.value;
+            }),
             _ => None,
         })
         .collect()

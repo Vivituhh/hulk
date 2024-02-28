@@ -5,13 +5,15 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use source_analyzer::cyclers::{CyclerKind, Cyclers};
 
+use super::Execution;
+
 pub fn generate_run_function(cyclers: &Cyclers) -> TokenStream {
     let construct_multiple_buffers = generate_multiple_buffers(cyclers);
     let construct_future_queues = generate_future_queues(cyclers);
     // 2 communication writer slots + n reader slots for other cyclers
     let number_of_parameter_slots = 2 + cyclers.number_of_instances();
     let recording_thread = generate_recording_thread(cyclers);
-    let construct_cyclers = generate_cycler_constructors(cyclers);
+    let construct_cyclers = generate_cycler_constructors(cyclers, Execution::Run);
     let start_cyclers = generate_cycler_starts(cyclers);
     let join_cyclers = generate_cycler_joins(cyclers);
 
@@ -79,6 +81,97 @@ pub fn generate_run_function(cyclers: &Cyclers) -> TokenStream {
     }
 }
 
+pub fn generate_replayer_struct(cyclers: &Cyclers) -> TokenStream {
+    let cycler_fields = generate_cycler_fields(cyclers);
+    let construct_multiple_buffers = generate_multiple_buffers(cyclers);
+    let construct_future_queues = generate_future_queues(cyclers);
+    // 2 communication writer slots + n reader slots for other cyclers
+    let number_of_parameter_slots = 2 + cyclers.number_of_instances();
+    let construct_cyclers = generate_cycler_constructors(cyclers, Execution::Replay);
+    let cycler_parameters = generate_cycler_parameters(cyclers);
+    let cycler_seeks = generate_cycler_seeks(cyclers);
+    let cycler_first_timestamps = generate_cycler_timestamps(cyclers, "first");
+    let cycler_last_timestamps = generate_cycler_timestamps(cyclers, "last");
+    let cycler_recording_paths = generate_cycler_recording_paths(cyclers);
+
+    quote! {
+        pub struct Replayer<Hardware> {
+            _communication_server: communication::server::Runtime<crate::structs::Parameters>,
+            #cycler_fields
+        }
+
+        impl<Hardware: crate::HardwareInterface + Send + Sync + 'static> Replayer<Hardware> {
+            #[allow(clippy::redundant_clone)]
+            pub fn new(
+                hardware_interface: std::sync::Arc<Hardware>,
+                addresses: Option<impl tokio::net::ToSocketAddrs + std::marker::Send + std::marker::Sync + 'static>,
+                parameters_directory: impl std::convert::AsRef<std::path::Path> + std::marker::Send + std::marker::Sync + 'static,
+                body_id: String,
+                head_id: String,
+                keep_running: tokio_util::sync::CancellationToken,
+                recording_file_paths: RecordingFilePaths,
+            ) -> color_eyre::Result<Self>
+            {
+                use color_eyre::eyre::WrapErr;
+
+                #construct_multiple_buffers
+                #construct_future_queues
+
+                let communication_server = communication::server::Runtime::start(
+                    addresses, parameters_directory, body_id, head_id, #number_of_parameter_slots, keep_running.clone())
+                    .wrap_err("failed to start communication server")?;
+
+                #construct_cyclers
+
+                Ok(Self {
+                    _communication_server: communication_server,
+                    #cycler_parameters
+                })
+            }
+
+            pub fn seek_before_or_equal_of(&mut self, timestamp: std::time::SystemTime) -> color_eyre::Result<()> {
+                use color_eyre::eyre::WrapErr;
+
+                #cycler_seeks
+
+                Ok(())
+            }
+
+            pub fn first_timestamp(&self) -> Option<std::time::SystemTime> {
+                [
+                    #cycler_first_timestamps
+                ].into_iter().flatten().min()
+            }
+
+            pub fn last_timestamp(&self) -> Option<std::time::SystemTime> {
+                [
+                    #cycler_last_timestamps
+                ].into_iter().flatten().max()
+            }
+        }
+
+        pub struct RecordingFilePaths {
+            #cycler_recording_paths
+        }
+    }
+}
+
+fn generate_cycler_fields(cyclers: &Cyclers) -> TokenStream {
+    cyclers
+        .instances()
+        .map(|(cycler, instance)| {
+            let cycler_variable_identifier =
+                format_ident!("{}_cycler", instance.to_case(Case::Snake));
+            let cycler_module_name = format_ident!("{}", cycler.name.to_case(Case::Snake));
+            let cycler_index_identifier = format_ident!("{}_index", instance.to_case(Case::Snake));
+            quote! {
+                #cycler_variable_identifier: crate::cyclers::#cycler_module_name::Cycler<Hardware>,
+                #cycler_index_identifier: framework::RecordingIndex,
+            }
+        })
+        .collect()
+}
+
 fn generate_multiple_buffers(cyclers: &Cyclers) -> TokenStream {
     // 2 writer slots + n-1 reader slots for other cyclers + 1 reader slot for communication
     let slots_for_real_time_cyclers: TokenStream = repeat(quote! { Default::default(), })
@@ -137,7 +230,13 @@ fn generate_recording_thread(cyclers: &Cyclers) -> TokenStream {
         let instance_name_snake_case = format_ident!("{}", instance.to_case(Case::Snake));
         let error_message = format!("failed to write into recording file for {instance}");
         quote! {
-            crate::cyclers::RecordingFrame::#instance_name { data } => #instance_name_snake_case.write_all(data.as_slice()).wrap_err(#error_message)?,
+            crate::cyclers::RecordingFrame::#instance_name { timestamp, data } => {
+                let mut recording_header = Vec::new();
+                bincode::serialize_into(&mut recording_header, &timestamp).wrap_err("failed to serialize timestamp")?;
+                bincode::serialize_into(&mut recording_header, &data.len()).wrap_err("failed to serialize data length")?;
+                #instance_name_snake_case.write_all(recording_header.as_slice()).wrap_err(#error_message)?;
+                #instance_name_snake_case.write_all(data.as_slice()).wrap_err(#error_message)?;
+            },
         }
     });
 
@@ -167,11 +266,13 @@ fn generate_recording_thread(cyclers: &Cyclers) -> TokenStream {
     }
 }
 
-fn generate_cycler_constructors(cyclers: &Cyclers) -> TokenStream {
+fn generate_cycler_constructors(cyclers: &Cyclers, mode: Execution) -> TokenStream {
     cyclers.instances().map(|(cycler, instance)| {
         let instance_name_snake_case = instance.to_case(Case::Snake);
+        let instance_name_snake_case_identifier = format_ident!("{instance_name_snake_case}");
         let cycler_database_changed_identifier = format_ident!("{instance_name_snake_case}_changed");
         let cycler_variable_identifier = format_ident!("{instance_name_snake_case}_cycler");
+        let cycler_index_identifier = format_ident!("{instance_name_snake_case}_index");
         let cycler_module_name = format_ident!("{}", cycler.name.to_case(Case::Snake));
         let cycler_instance_name = &instance;
         let cycler_instance_name_identifier = format_ident!("{cycler_instance_name}");
@@ -179,6 +280,22 @@ fn generate_cycler_constructors(cyclers: &Cyclers) -> TokenStream {
         let own_reader_identifier = format_ident!("{instance_name_snake_case}_reader");
         let own_subscribed_outputs_writer_identifier = format_ident!("{instance_name_snake_case}_subscribed_outputs_writer");
         let own_subscribed_outputs_reader_identifier = format_ident!("{instance_name_snake_case}_subscribed_outputs_reader");
+        let enable_recording = if mode == Execution::Run {
+            quote! {
+                let enable_recording = cycler_instances_to_be_recorded.contains(#cycler_instance_name);
+            }
+        } else {
+            Default::default()
+        };
+        let recording_index = if mode == Execution::Replay {
+            quote! {
+                let #cycler_index_identifier = framework::RecordingIndex::read_from(
+                    recording_file_paths.#instance_name_snake_case_identifier
+                ).wrap_err("failed to read recording index")?;
+            }
+        } else {
+            Default::default()
+        };
         let own_producer_identifier = match cycler.kind {
             CyclerKind::Perception  => {
                 let own_producer_identifier = format_ident!("{instance_name_snake_case}_producer");
@@ -200,6 +317,14 @@ fn generate_cycler_constructors(cyclers: &Cyclers) -> TokenStream {
                     quote! { #identifier.clone() }
                 },
             });
+        let recording_parameters = if mode == Execution::Run {
+            quote! {
+                recording_sender.clone(),
+                enable_recording,
+            }
+        } else {
+            Default::default()
+        };
         let error_message = format!("failed to create cycler `{}`", instance);
         quote! {
             let #cycler_database_changed_identifier = std::sync::Arc::new(tokio::sync::Notify::new());
@@ -208,7 +333,8 @@ fn generate_cycler_constructors(cyclers: &Cyclers) -> TokenStream {
                 Default::default(),
                 Default::default(),
             ]);
-            let enable_recording = cycler_instances_to_be_recorded.contains(#cycler_instance_name);
+            #enable_recording
+            #recording_index
             let #cycler_variable_identifier = crate::cyclers::#cycler_module_name::Cycler::new(
                 crate::cyclers::#cycler_module_name::CyclerInstance::#cycler_instance_name_identifier,
                 hardware_interface.clone(),
@@ -218,8 +344,7 @@ fn generate_cycler_constructors(cyclers: &Cyclers) -> TokenStream {
                 communication_server.get_parameters_reader(),
                 #own_producer_identifier
                 #(#other_cycler_inputs,)*
-                recording_sender.clone(),
-                enable_recording,
+                #recording_parameters
             )
             .wrap_err(#error_message)?;
             communication_server.register_cycler_instance(
@@ -269,6 +394,62 @@ fn generate_cycler_joins(cyclers: &Cyclers) -> TokenStream {
                     },
                     _ => {},
                 }
+            }
+        })
+        .collect()
+}
+
+fn generate_cycler_parameters(cyclers: &Cyclers) -> TokenStream {
+    cyclers
+        .instances()
+        .map(|(_cycler, instance)| {
+            let cycler_variable_identifier =
+                format_ident!("{}_cycler", instance.to_case(Case::Snake));
+            let cycler_index_identifier = format_ident!("{}_index", instance.to_case(Case::Snake));
+            quote! {
+                #cycler_variable_identifier,
+                #cycler_index_identifier,
+            }
+        })
+        .collect()
+}
+
+fn generate_cycler_seeks(cyclers: &Cyclers) -> TokenStream {
+    cyclers
+        .instances()
+        .map(|(_cycler, instance)| {
+            let cycler_variable_identifier =
+                format_ident!("{}_cycler", instance.to_case(Case::Snake));
+            let cycler_index_identifier = format_ident!("{}_index", instance.to_case(Case::Snake));
+            quote! {
+                if let Some(frame) = self.#cycler_index_identifier.before_or_equal_of(timestamp).wrap_err("failed to seek")? {
+                    self.#cycler_variable_identifier.cycle(frame.timestamp, &frame.data).wrap_err("failed to replay cycle")?;
+                }
+            }
+        })
+        .collect()
+}
+
+fn generate_cycler_timestamps(cyclers: &Cyclers, variant: &str) -> TokenStream {
+    cyclers
+        .instances()
+        .map(|(_cycler, instance)| {
+            let cycler_index_identifier = format_ident!("{}_index", instance.to_case(Case::Snake));
+            let method = format_ident!("{variant}_timestamp");
+            quote! {
+                self.#cycler_index_identifier.#method(),
+            }
+        })
+        .collect()
+}
+
+fn generate_cycler_recording_paths(cyclers: &Cyclers) -> TokenStream {
+    cyclers
+        .instances()
+        .map(|(_cycler, instance)| {
+            let cycler_identifier = format_ident!("{}", instance.to_case(Case::Snake));
+            quote! {
+                pub #cycler_identifier: std::path::PathBuf,
             }
         })
         .collect()

@@ -1,5 +1,5 @@
 [package]
-name = "hulk"
+name = "hulk_replayer"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,12 +11,15 @@ bincode = { workspace = true }
 color-eyre = { workspace = true }
 communication = { workspace = true, features = ["server"] }
 control = { workspace = true }
+ctrlc = { workspace = true }
+eframe = { workspace = true }
 framework = { workspace = true }
 geometry = { workspace = true }
 hardware = { workspace = true }
 ittapi = {  workspace = true }
 nalgebra = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 serialize_hierarchy = { workspace = true }
 spl_network = { workspace = true }
 spl_network_messages = { workspace = true }
