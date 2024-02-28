@@ -67,6 +67,7 @@ fn main() -> Result<()> {
                     "control::motion::sit_down",
                     "control::motion::stand_up_back",
                     "control::motion::stand_up_front",
+                    "control::motion::stand_up_sitting",
                     "control::motion::step_planner",
                     "control::motion::walk_manager",
                     "control::motion::walking_engine",

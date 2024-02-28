@@ -2,7 +2,12 @@ use nalgebra::{Point2, UnitComplex};
 use serde::{Deserialize, Serialize};
 use serialize_hierarchy::SerializeHierarchy;
 
-use crate::{camera_position::CameraPosition, planned_path::PathSegment, support_foot::Side};
+use crate::{
+    camera_position::CameraPosition,
+    fall_state::{Facing, FallDirection},
+    planned_path::PathSegment,
+    support_foot::Side,
+};
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum OrientationMode {
@@ -102,23 +107,9 @@ pub enum KickVariant {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, SerializeHierarchy)]
-pub enum Facing {
-    Down,
-    Up,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, SerializeHierarchy)]
 pub enum SitDirection {
     Down,
     Up,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, SerializeHierarchy)]
-pub enum FallDirection {
-    Backward,
-    Forward,
-    Left,
-    Right,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, SerializeHierarchy)]

@@ -28,6 +28,7 @@ pub struct CycleContext {
     sit_down_joints_command: Input<MotorCommands<Joints<f32>>, "sit_down_joints_command">,
     stand_up_back_positions: Input<Joints<f32>, "stand_up_back_positions">,
     stand_up_front_positions: Input<Joints<f32>, "stand_up_front_positions">,
+    stand_up_sitting_positions: Input<Joints<f32>, "stand_up_sitting_positions">,
     walk_motor_commands: Input<MotorCommands<BodyJoints<f32>>, "walk_motor_commands">,
 
     joint_calibration_offsets: Parameter<Joints<f32>, "joint_calibration_offsets">,
@@ -49,7 +50,7 @@ impl MotorCommandCollector {
     }
 
     pub fn cycle(&mut self, mut context: CycleContext) -> Result<MainOutputs> {
-        let current_positions = context.sensor_data.positions;
+        let measured_positions = context.sensor_data.positions;
         let dispatching_command = context.dispatching_command;
         let fall_protection_positions = context.fall_protection_command.positions;
         let fall_protection_stiffnesses = context.fall_protection_command.stiffnesses;
@@ -61,6 +62,7 @@ impl MotorCommandCollector {
         let sit_down = context.sit_down_joints_command;
         let stand_up_back_positions = context.stand_up_back_positions;
         let stand_up_front_positions = context.stand_up_front_positions;
+        let stand_up_sitting_positions = context.stand_up_sitting_positions;
         let walk = context.walk_motor_commands;
 
         let (positions, stiffnesses) = match motion_selection.current_motion {
@@ -81,7 +83,8 @@ impl MotorCommandCollector {
             ),
             MotionType::StandUpBack => (*stand_up_back_positions, Joints::fill(1.0)),
             MotionType::StandUpFront => (*stand_up_front_positions, Joints::fill(1.0)),
-            MotionType::Unstiff => (current_positions, Joints::fill(0.0)),
+            MotionType::StandUpSitting => (*stand_up_sitting_positions, Joints::fill(1.0)),
+            MotionType::Unstiff => (measured_positions, Joints::fill(0.0)),
             MotionType::Walk => (
                 Joints::from_head_and_body(head_joints_command.positions, walk.positions),
                 Joints::from_head_and_body(head_joints_command.stiffnesses, walk.stiffnesses),
@@ -98,7 +101,7 @@ impl MotorCommandCollector {
 
         context
             .motor_position_difference
-            .fill_if_subscribed(|| motor_commands.positions - current_positions);
+            .fill_if_subscribed(|| motor_commands.positions - measured_positions);
 
         Ok(MainOutputs {
             motor_commands: motor_commands.into(),

@@ -334,17 +334,6 @@ pub struct ObstacleFilterParameters {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, SerializeHierarchy)]
-pub struct FallStateEstimationParameters {
-    pub linear_acceleration_low_pass_factor: f32,
-    pub angular_velocity_low_pass_factor: f32,
-    pub roll_pitch_low_pass_factor: f32,
-    pub gravitational_acceleration_threshold: f32,
-    pub fallen_timeout: Duration,
-    pub falling_angle_threshold_left: Vector2<f32>,
-    pub falling_angle_threshold_forward: Vector2<f32>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize, SerializeHierarchy)]
 pub struct CameraMatrixParameters {
     pub extrinsic_rotations: Vector3<f32>,
     pub focal_lengths: Vector2<f32>,
