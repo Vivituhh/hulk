@@ -105,6 +105,7 @@ impl Overlays {
         let field_border = EnabledOverlay::new(nao.clone(), storage, true, selected_cycler);
         let limb_projector = EnabledOverlay::new(nao.clone(), storage, true, selected_cycler);
         let perspective_grid = EnabledOverlay::new(nao.clone(), storage, true, selected_cycler);
+        let pose_detection = EnabledOverlay::new(nao, storage, true, selected_cycler);
 
         Self {
             line_detection,
@@ -115,6 +116,8 @@ impl Overlays {
             field_border,
             limb_projector,
             perspective_grid,
+            limb_projector,
+            pose_detection,
         }
     }
 
@@ -127,7 +130,7 @@ impl Overlays {
         self.field_border.update_cycler(selected_cycler);
         self.limb_projector.update_cycler(selected_cycler);
         self.perspective_grid.update_cycler(selected_cycler);
-        self.robot_detection.update_cycler(selected_cycler);
+        self.pose_detection.update_cycler(selected_cycler);
     }
 
     pub fn combo_box(&mut self, ui: &mut Ui, selected_cycler: Cycler) {
