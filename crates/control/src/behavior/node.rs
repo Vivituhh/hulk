@@ -146,10 +146,6 @@ impl Behavior {
             .filtered_game_controller_state
             .map(|filtered_game_controller_state| filtered_game_controller_state.game_state);
 
-        if let Some(FilteredGameState::Initial) = filtered_game_state {
-            actions.push(Action::LookAtReferee);
-        }
-
         match world_state.robot.role {
             Role::DefenderLeft => actions.push(Action::DefendLeft),
             Role::DefenderRight => actions.push(Action::DefendRight),
@@ -255,9 +251,6 @@ impl Behavior {
                     Action::StandUp => stand_up::execute(world_state),
                     Action::NoGroundContact => no_ground_contact::execute(world_state),
                     Action::LookAround => look_around::execute(world_state),
-                    Action::LookAtReferee => {
-                        look_at_referee::execute(world_state, *context.expected_referee_position)
-                    }
                     Action::InterceptBall => intercept_ball::execute(
                         world_state,
                         *context.intercept_ball_parameters,
