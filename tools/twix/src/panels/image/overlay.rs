@@ -11,7 +11,7 @@ use crate::{nao::Nao, twix_painter::TwixPainter};
 
 use super::overlays::{
     BallDetection, FeetDetection, FieldBorder, Horizon, LimbProjector, LineDetection, PenaltyBoxes,
-    PerspectiveGrid,
+    PerspectiveGrid, PoseDetection,
 };
 use super::overlays::{
     BallDetection, FeetDetection, LimbProjector, LineDetection, PenaltyBoxes, PoseDetection,
