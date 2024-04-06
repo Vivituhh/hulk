@@ -85,9 +85,8 @@ impl ButtonFilter {
                 .unwrap()
                 >= head_buttons_timeout;
 
-                
-
-        let first_head_button_touched = touch_sensors.head_front && !touch_sensors.head_middle && !touch_sensors.head_rear;
+        let first_head_button_touched =
+            touch_sensors.head_front && !touch_sensors.head_middle && !touch_sensors.head_rear;
 
         let first_head_button_touched_initially =
             first_head_button_touched && !self.last_first_head_button_touched;
@@ -109,14 +108,14 @@ impl ButtonFilter {
             context
                 .hardware
                 .write_to_network(OutgoingMessage::Spl(HulkMessage {
-                    player_number: PlayerNumber::Seven,
+                    player_number: PlayerNumber::Five,
                     fallen: false,
                     pose: Isometry2::<Ground, Field>::identity().as_pose(),
                     over_arms_pose_detected: true,
                     ball_position: None,
                     time_to_reach_kick_position: Some(*context.time_to_reach_kick_position),
                 }))?;
-            println!("Initial -> Ready")
+            // println!("Initial -> Ready")
         }
 
         let calibration_buttons_touched = touch_sensors.chest_button && touch_sensors.head_front;
