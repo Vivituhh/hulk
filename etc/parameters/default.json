@@ -109,7 +109,8 @@
     },
     "detection_top": {
       "resolution": 42,
-      "camera_position": "Top"
+      "camera_position": "Top",
+      "frame_rate_limit": 5
     },
     "vision_bottom": {
       "resolution": 42,

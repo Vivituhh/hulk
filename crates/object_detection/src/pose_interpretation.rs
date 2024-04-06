@@ -40,7 +40,6 @@ pub struct CycleContext {
 
     camera_matrices: RequiredInput<Option<CameraMatrices>, "Control", "camera_matrices?">,
     human_poses: Input<Vec<HumanPose>, "human_poses">,
-    image: Input<YCbCr422Image, "image">,
     ground_to_field: Input<Option<Isometry2<Ground, Field>>, "Control", "ground_to_field?">,
     ground_to_field_of_home_after_coin_toss_before_second_half: Input<
         Option<Isometry2<Ground, Field>>,

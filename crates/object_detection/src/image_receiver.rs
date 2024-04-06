@@ -10,6 +10,8 @@ use types::{camera_position::CameraPosition, ycbcr422_image::YCbCr422Image};
 #[derive(Deserialize, Serialize)]
 pub struct ImageReceiver {
     last_cycle_start: SystemTime,
+    image_count: u32,
+    last_frame_time: SystemTime,
 }
 
 #[context]
@@ -21,6 +23,7 @@ pub struct CreationContext {
 pub struct CycleContext {
     hardware_interface: HardwareInterface,
     camera_position: Parameter<CameraPosition, "image_receiver.$cycler_instance.camera_position">,
+    frame_rate_limit: Parameter<u32, "image_receiver.$cycler_instance.frame_rate_limit">,
 
     last_cycle_time: AdditionalOutput<Duration, "cycle_time">,
     image_waiting_time: AdditionalOutput<Duration, "image_waiting_time">,
@@ -28,13 +31,15 @@ pub struct CycleContext {
 
 #[context]
 pub struct MainOutputs {
-    pub image: MainOutput<YCbCr422Image>,
+    pub image: MainOutput<Option<YCbCr422Image>>,
 }
 
 impl ImageReceiver {
     pub fn new(context: CreationContext<impl TimeInterface>) -> Result<Self> {
         Ok(Self {
             last_cycle_start: context.hardware_interface.get_now(),
+            image_count: 0,
+            last_frame_time: context.hardware_interface.get_now(),
         })
     }
 
@@ -42,6 +47,18 @@ impl ImageReceiver {
         &mut self,
         mut context: CycleContext<impl CameraInterface + TimeInterface>,
     ) -> Result<MainOutputs> {
+        let duration_since_last_cycle = context
+            .hardware_interface
+            .get_now()
+            .duration_since(self.last_frame_time)?;
+        let minimum_elapsed_duration =
+            Duration::from_secs_f64(1.0 / *context.frame_rate_limit as f64);
+        if duration_since_last_cycle.cmp(&minimum_elapsed_duration) == std::cmp::Ordering::Less {
+            return Ok(MainOutputs { image: None.into() });
+        } else {
+            self.last_frame_time = context.hardware_interface.get_now();
+        }
+
         let now = context.hardware_interface.get_now();
 
         context.last_cycle_time.fill_if_subscribed(|| {
@@ -63,7 +80,7 @@ impl ImageReceiver {
         self.last_cycle_start = context.hardware_interface.get_now();
 
         Ok(MainOutputs {
-            image: image.into(),
+            image: Some(image).into(),
         })
     }
 }

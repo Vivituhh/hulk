@@ -69,7 +69,7 @@ pub struct CycleContext {
     inference_time: AdditionalOutput<Duration, "inference_time">,
     postprocess_time: AdditionalOutput<Duration, "postprocess_time">,
 
-    image: Input<YCbCr422Image, "image">,
+    image: RequiredInput<Option<YCbCr422Image>, "image?">,
     hardware_interface: HardwareInterface,
 
     iou_threshold: Parameter<f32, "detection.$cycler_instance.iou_threshold">,
