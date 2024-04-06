@@ -70,6 +70,7 @@ impl Endpoint {
                     let (received_bytes, _address) = result.map_err(Error::ReadError)?;
                     match bincode::deserialize(&spl_buffer[0..received_bytes]) {
                         Ok(parsed_message) => {
+                            dbg!(&parsed_message);
                             break Ok(IncomingMessage::Spl(parsed_message));
                         }
                         Err(error) => {
@@ -91,6 +92,7 @@ impl Endpoint {
             }
             OutgoingMessage::Spl(message) => match bincode::serialize(&message) {
                 Ok(message) => {
+                    dbg!(&message);
                     if let Err(error) = self
                         .spl_socket
                         .send_to(
