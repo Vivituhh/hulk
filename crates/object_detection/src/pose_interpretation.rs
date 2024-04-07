@@ -39,7 +39,7 @@ pub struct CycleContext {
     time_to_reach_kick_position: CyclerState<Duration, "time_to_reach_kick_position">,
 
     camera_matrices: RequiredInput<Option<CameraMatrices>, "Control", "camera_matrices?">,
-    human_poses: Input<Vec<HumanPose>, "human_poses">,
+    human_poses: RequiredInput<Option<Vec<HumanPose>>, "human_poses?">,
     ground_to_field: Input<Option<Isometry2<Ground, Field>>, "Control", "ground_to_field?">,
     expected_referee_position: Input<Point2<Ground>, "Control", "expected_referee_position">,
     fall_state: Input<FallState, "Control", "fall_state">,
