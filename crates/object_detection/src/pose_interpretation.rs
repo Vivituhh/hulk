@@ -1,4 +1,5 @@
 use std::time::Duration;
+use std::time::SystemTime;
 
 use color_eyre::Result;
 use context_attribute::context;
@@ -20,13 +21,16 @@ use projection::Projection;
 use serde::{Deserialize, Serialize};
 use spl_network_messages::HulkMessage;
 use spl_network_messages::PlayerNumber;
+use types::cycle_time::CycleTime;
 use types::fall_state::FallState;
 use types::messages::OutgoingMessage;
 use types::pose_detection::Keypoints;
 use types::{pose_detection::HumanPose, pose_types::PoseType};
 
 #[derive(Deserialize, Serialize)]
-pub struct PoseInterpretation {}
+pub struct PoseInterpretation {
+    last_time_message_sent: Option<SystemTime>,
+}
 
 #[context]
 pub struct CreationContext {
@@ -43,6 +47,7 @@ pub struct CycleContext {
     ground_to_field: Input<Option<Isometry2<Ground, Field>>, "Control", "ground_to_field?">,
     expected_referee_position: Input<Point2<Ground>, "Control", "expected_referee_position">,
     fall_state: Input<FallState, "Control", "fall_state">,
+    cycle_time: Input<CycleTime, "cycle_time">,
 
     player_number: Parameter<PlayerNumber, "player_number">,
     keypoint_confidence_threshold:
@@ -52,6 +57,8 @@ pub struct CycleContext {
     foot_z_offset: Parameter<f32, "detection.$cycler_instance.foot_z_offset">,
     shoulder_angle_threshhold:
         Parameter<f32, "detection.$cycler_instance.shoulder_angle_threshhold">,
+    time_between_visual_referee_messages:
+        Parameter<Duration, "detection.$cycler_instance.time_between_visual_referee_messages">,
 }
 
 #[context]
@@ -63,7 +70,9 @@ pub struct MainOutputs {
 
 impl PoseInterpretation {
     pub fn new(_context: CreationContext<impl PathsInterface>) -> Result<Self> {
-        Ok(PoseInterpretation {})
+        Ok(PoseInterpretation {
+            last_time_message_sent: None,
+        })
     }
 
     pub fn cycle(&mut self, context: CycleContext<impl NetworkInterface>) -> Result<MainOutputs> {
@@ -91,17 +100,26 @@ impl PoseInterpretation {
         );
 
         if let PoseType::OverheadArms = pose_type {
-            if let Some(ground_to_field) = context.ground_to_field {
-                context
-                    .hardware_interface
-                    .write_to_network(OutgoingMessage::Spl(HulkMessage {
-                        player_number: *context.player_number,
-                        fallen: matches!(context.fall_state, FallState::Fallen { .. }),
-                        pose: ground_to_field.as_pose(),
-                        over_arms_pose_detected: true,
-                        ball_position: None,
-                        time_to_reach_kick_position: Some(*context.time_to_reach_kick_position),
-                    }))?;
+            self.last_time_message_sent = Some(context.cycle_time.start_time);
+            if let Some((ground_to_field, last_time_message_sent)) =
+                context.ground_to_field.zip(self.last_time_message_sent)
+            {
+                if last_time_message_sent
+                    .duration_since(last_time_message_sent)
+                    .unwrap()
+                    >= *context.time_between_visual_referee_messages
+                {
+                    context
+                        .hardware_interface
+                        .write_to_network(OutgoingMessage::Spl(HulkMessage {
+                            player_number: *context.player_number,
+                            fallen: matches!(context.fall_state, FallState::Fallen { .. }),
+                            pose: ground_to_field.as_pose(),
+                            over_arms_pose_detected: true,
+                            ball_position: None,
+                            time_to_reach_kick_position: Some(*context.time_to_reach_kick_position),
+                        }))?;
+                }
             }
         };
 
