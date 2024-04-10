@@ -13,10 +13,6 @@ use super::overlays::{
     BallDetection, FeetDetection, FieldBorder, Horizon, LimbProjector, LineDetection, PenaltyBoxes,
     PerspectiveGrid, PoseDetection,
 };
-use super::overlays::{
-    BallDetection, FeetDetection, LimbProjector, LineDetection, PenaltyBoxes, PoseDetection,
-};
-
 pub trait Overlay {
     const NAME: &'static str;
     fn new(nao: Arc<Nao>, selected_cycler: Cycler) -> Self;
@@ -116,7 +112,6 @@ impl Overlays {
             field_border,
             limb_projector,
             perspective_grid,
-            limb_projector,
             pose_detection,
         }
     }
