@@ -2200,6 +2200,7 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "color-eyre",
+ "libc",
  "parking_lot",
  "serde",
 ]
@@ -2674,6 +2675,7 @@ dependencies = [
  "hardware",
  "hulk_manifest",
  "ittapi",
+ "libc",
  "linear_algebra",
  "nalgebra",
  "object_detection",
