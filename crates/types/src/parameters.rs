@@ -171,6 +171,12 @@ pub struct GameStateFilterParameters {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, SerializeHierarchy)]
+pub struct RefereePoseDetectionFilterParameters {
+    pub initial_message_grace_period: Duration,
+    pub minimum_over_head_arms_detections: usize,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, SerializeHierarchy)]
 pub struct WalkingEngineParameters {
     pub additional_kick_foot_lift: f32,
     pub arm_stiffness: f32,
@@ -349,6 +355,7 @@ pub struct FallStateEstimationParameters {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, SerializeHierarchy)]
 pub struct CameraMatrixParameters {
+    pub camera_pitch: f32,
     pub extrinsic_rotations: Vector3<f32>,
     pub focal_lengths: nalgebra::Vector2<f32>,
     pub cc_optical_center: nalgebra::Point2<f32>,

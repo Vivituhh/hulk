@@ -4,7 +4,7 @@ use color_eyre::Result;
 use serde::{Deserialize, Serialize};
 
 use context_attribute::context;
-use coordinate_systems::Field;
+use coordinate_systems::{Field, Ground, Pixel};
 use framework::{AdditionalOutput, MainOutput};
 use linear_algebra::{point, Point2};
 use spl_network_messages::{GamePhase, SubState, Team};
@@ -55,6 +55,7 @@ pub struct CycleContext {
     dribble_path_obstacles_output: AdditionalOutput<Vec<PathObstacle>, "dribble_path_obstacles">,
     active_action_output: AdditionalOutput<Action, "active_action">,
 
+    expected_referee_position: Input<Point2<Ground>, "expected_referee_position">,
     has_ground_contact: Input<bool, "has_ground_contact">,
     world_state: Input<WorldState, "world_state">,
     cycle_time: Input<CycleTime, "cycle_time">,
@@ -66,6 +67,7 @@ pub struct CycleContext {
     intercept_ball_parameters: Parameter<InterceptBallParameters, "behavior.intercept_ball">,
     maximum_step_size: Parameter<Step, "step_planner.max_step_size">,
     striker_set_position: Parameter<Point2<Field>, "behavior.role_positions.striker_set_position">,
+    referee_pixel_offset: Parameter<Point2<Pixel>, "detection.detection_top.referee_pixel_offset">,
 }
 
 #[context]
@@ -225,7 +227,11 @@ impl Behavior {
                     Action::Unstiff => unstiff::execute(world_state),
                     Action::SitDown => sit_down::execute(world_state),
                     Action::Penalize => penalize::execute(world_state),
-                    Action::Initial => initial::execute(world_state),
+                    Action::Initial => initial::execute(
+                        world_state,
+                        *context.expected_referee_position,
+                        *context.referee_pixel_offset,
+                    ),
                     Action::FallSafely => {
                         fall_safely::execute(world_state, *context.has_ground_contact)
                     }

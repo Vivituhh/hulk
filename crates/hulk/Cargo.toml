@@ -19,6 +19,8 @@ hardware = { workspace = true }
 ittapi = {  workspace = true }
 linear_algebra = { workspace = true }
 nalgebra = { workspace = true }
+projection = { workspace = true }
+object_detection = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serialize_hierarchy = { workspace = true }

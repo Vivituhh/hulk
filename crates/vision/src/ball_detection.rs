@@ -8,10 +8,9 @@ use framework::{deserialize_not_implemented, AdditionalOutput, MainOutput};
 use geometry::{circle::Circle, rectangle::Rectangle};
 use hardware::PathsInterface;
 use linear_algebra::{point, vector, Vector2};
-use projection::Projection;
+use projection::{camera_matrix::CameraMatrix, Projection};
 use types::{
     ball::{Ball, CandidateEvaluation},
-    camera_matrix::CameraMatrix,
     parameters::BallDetectionParameters,
     perspective_grid_candidates::PerspectiveGridCandidates,
     ycbcr422_image::YCbCr422Image,
@@ -123,7 +122,7 @@ impl BallDetection {
         for ball in &mut detected_balls {
             ball.merge_weight = Some(calculate_ball_merge_factor(
                 ball,
-                vector![context.image.width(), context.image.height()],
+                vector![context.image.width() as f32, context.image.height() as f32],
                 context.parameters.confidence_merge_factor,
                 context.parameters.correction_proximity_merge_factor,
                 context.parameters.image_containment_merge_factor,
@@ -261,10 +260,10 @@ fn bounding_box_patch_intersection(
     intersection_area / circle_box.area()
 }
 
-fn image_containment(circle: Circle<Pixel>, image_size: Vector2<Pixel, u32>) -> f32 {
+fn image_containment(circle: Circle<Pixel>, image_size: Vector2<Pixel>) -> f32 {
     let image_rectangle = Rectangle {
         min: point![0.0, 0.0],
-        max: point![image_size.x() as f32, image_size.y() as f32],
+        max: image_size.as_point(),
     };
     let circle_box = circle.bounding_box();
 
@@ -274,7 +273,7 @@ fn image_containment(circle: Circle<Pixel>, image_size: Vector2<Pixel, u32>) -> 
 
 fn calculate_ball_merge_factor(
     ball: &CandidateEvaluation,
-    image_size: Vector2<Pixel, u32>,
+    image_size: Vector2<Pixel>,
     confidence_merge_factor: f32,
     correction_proximity_merge_factor: f32,
     image_containment_merge_factor: f32,
@@ -351,11 +350,15 @@ fn project_balls_to_ground(
 
 #[cfg(test)]
 mod tests {
-    use std::path::{Path, PathBuf};
+    use std::{
+        f32::consts::FRAC_PI_2,
+        path::{Path, PathBuf},
+    };
 
     use approx::assert_relative_eq;
-    use linear_algebra::IntoTransform;
-    use nalgebra::{Isometry3, Translation, UnitQuaternion};
+    use coordinate_systems::{Camera, Head};
+    use linear_algebra::{IntoTransform, Isometry3, Vector3};
+    use nalgebra::{Translation, UnitQuaternion};
 
     use super::*;
 
@@ -364,6 +367,14 @@ mod tests {
     const POSITIONER_PATH: &str = "../../etc/neural_networks/positioner.hdf5";
 
     const BALL_SAMPLE_PATH: &str = "../../tests/data/ball_sample.png";
+
+    fn head_to_camera(camera_pitch: f32, head_to_camera: Vector3<Head>) -> Isometry3<Head, Camera> {
+        (nalgebra::Isometry3::rotation(nalgebra::Vector3::x() * -camera_pitch)
+            * nalgebra::Isometry3::rotation(nalgebra::Vector3::y() * -FRAC_PI_2)
+            * nalgebra::Isometry3::rotation(nalgebra::Vector3::x() * FRAC_PI_2)
+            * nalgebra::Isometry3::from(-head_to_camera.inner))
+        .framed_transform()
+    }
 
     #[test]
     fn preclassify_ball() {
@@ -438,7 +449,7 @@ mod tests {
             merge_weight: None,
         };
         let merge_weight =
-            calculate_ball_merge_factor(&ball_candidate, vector!(90, 90), 1.0, 1.0, 1.0);
+            calculate_ball_merge_factor(&ball_candidate, vector!(90.0, 90.0), 1.0, 1.0, 1.0);
         assert_relative_eq!(merge_weight, 1.0);
     }
 
@@ -458,7 +469,7 @@ mod tests {
             merge_weight: None,
         };
         let merge_weight =
-            calculate_ball_merge_factor(&ball_candidate, vector!(90, 90), 1.0, 1.0, 1.0);
+            calculate_ball_merge_factor(&ball_candidate, vector!(90.0, 90.0), 1.0, 1.0, 1.0);
         assert_relative_eq!(merge_weight, 0.5 * 0.75 * (7.0 / 8.0));
     }
 
@@ -493,14 +504,14 @@ mod tests {
         let camera_matrix = CameraMatrix::from_normalized_focal_and_center(
             focal_length,
             optical_center,
-            point![image.width() as f32, image.height() as f32],
-            Isometry3 {
+            vector![image.width() as f32, image.height() as f32],
+            nalgebra::Isometry3 {
                 rotation: UnitQuaternion::from_euler_angles(0.0, 39.7_f32.to_radians(), 0.0),
                 translation: Translation::from(nalgebra::point![0.0, 0.0, 0.75]),
             }
             .framed_transform(),
-            Isometry3::identity().framed_transform(),
-            Isometry3::identity().framed_transform(),
+            nalgebra::Isometry3::identity().framed_transform(),
+            head_to_camera(0.0, Vector3::zeros()),
         );
 
         let mut additional_output_buffer = None;
@@ -537,7 +548,7 @@ mod tests {
         assert_relative_eq!(
             balls.value.unwrap()[0],
             Ball {
-                position: point![0.374, 0.008],
+                position: point![1.53, 0.02],
                 image_location: Circle {
                     center: point![308.93, 176.42],
                     radius: 42.92,

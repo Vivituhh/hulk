@@ -1,4 +1,22 @@
 {
+  "detection": {
+    "detection_top": {
+      "enable": true,
+      "iou_threshold": 0.45,
+      "distance_to_referee_position_threshhold": 1.0,
+      "keypoint_confidence_threshold": 0.2,
+      "shoulder_angle_threshhold": 0.2,
+      "foot_z_offset": 0.1,
+      "normed_expected_referee_position": [
+        0.0,
+        0.5
+      ],
+      "referee_pixel_offset": [
+        320.0,
+        340.0
+      ]
+    }
+  },
   "whistle_detection": {
     "detection_band": {
       "start": 2000,
@@ -40,14 +58,36 @@
   },
   "camera_matrix_parameters": {
     "vision_top": {
-      "extrinsic_rotations": [0, 0, 0],
-      "focal_lengths": [0.95, 1.27],
-      "cc_optical_center": [0.5, 0.5]
+      "camera_pitch": -1.2,
+      "extrinsic_rotations": [
+        0,
+        0,
+        0
+      ],
+      "focal_lengths": [
+        0.95,
+        1.27
+      ],
+      "cc_optical_center": [
+        0.5,
+        0.5
+      ]
     },
     "vision_bottom": {
-      "extrinsic_rotations": [0, 0, 0],
-      "focal_lengths": [0.95, 1.27],
-      "cc_optical_center": [0.5, 0.5]
+      "camera_pitch": -39.7,
+      "extrinsic_rotations": [
+        0,
+        0,
+        0
+      ],
+      "focal_lengths": [
+        0.95,
+        1.27
+      ],
+      "cc_optical_center": [
+        0.5,
+        0.5
+      ]
     }
   },
   "foot_bumper_filter": {
@@ -63,6 +103,11 @@
     "vision_top": {
       "resolution": 42,
       "camera_position": "Top"
+    },
+    "detection_top": {
+      "resolution": 42,
+      "camera_position": "Top",
+      "frame_rate_limit": 5
     },
     "vision_bottom": {
       "resolution": 42,
@@ -223,12 +268,10 @@
   },
   "perspective_grid_candidates_provider": {
     "vision_top": {
-      "minimum_radius": 3.0,
-      "fallback_radius": 42.0
+      "minimum_radius": 3.0
     },
     "vision_bottom": {
-      "minimum_radius": 3.0,
-      "fallback_radius": 42.0
+      "minimum_radius": 3.0
     }
   },
   "feet_detection": {
@@ -943,6 +986,13 @@
     },
     "distance_to_consider_ball_moved_in_kick_off": 0.3,
     "whistle_acceptance_goal_distance": [0.5, 0.5]
+  },
+  "referee_pose_detection_filter": {
+    "initial_message_grace_period": {
+      "nanos": 0,
+      "secs": 5
+    },
+    "minimum_over_head_arms_detections": 2
   },
   "ground_contact_detector": {
     "pressure_threshold": 0.6,

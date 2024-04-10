@@ -6,12 +6,10 @@ use context_attribute::context;
 use coordinate_systems::Pixel;
 use framework::{AdditionalOutput, MainOutput};
 use linear_algebra::{point, Point2, Vector2};
-use projection::Projection;
+use projection::{camera_matrix::CameraMatrix, horizon::Horizon, Projection};
 use types::{
-    camera_matrix::CameraMatrix,
     color::Intensity,
     field_border::FieldBorder,
-    horizon::Horizon,
     image_segments::{ImageSegments, Segment},
 };
 
@@ -70,7 +68,7 @@ impl FieldBorderDetection {
             .filter_map(|scan_line| {
                 get_first_field_segment(
                     &scan_line.segments,
-                    &context.camera_matrix.horizon,
+                    &context.camera_matrix.horizon.unwrap_or_default(),
                     *context.horizon_margin,
                 )
                 .map(|segment| point![scan_line.position as f32, segment.start as f32])
@@ -176,6 +174,7 @@ fn is_orthogonal(
 #[cfg(test)]
 mod test {
     use approx::assert_relative_eq;
+    use linear_algebra::vector;
     use rand::{rngs::StdRng, Rng, SeedableRng};
     use types::{
         color::YCbCr444,
@@ -228,8 +227,8 @@ mod test {
         let green_segment = get_first_field_segment(
             &scanline.segments,
             &Horizon {
-                left_horizon_y: 0.0,
-                right_horizon_y: 0.0,
+                vanishing_point: point![0.0, 0.0],
+                normal: vector![0.0, 1.0],
             },
             5.0,
         );

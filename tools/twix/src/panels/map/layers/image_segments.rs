@@ -6,8 +6,8 @@ use eframe::epaint::{Color32, Stroke};
 use communication::client::CyclerOutput;
 use coordinate_systems::Ground;
 use linear_algebra::{center, point, Point2};
-use projection::Projection;
-use types::{camera_matrix::CameraMatrix, color::Rgb, field_dimensions::FieldDimensions};
+use projection::{camera_matrix::CameraMatrix, Projection};
+use types::{color::Rgb, field_dimensions::FieldDimensions};
 
 use crate::{panels::map::layer::Layer, twix_painter::TwixPainter, value_buffer::ValueBuffer};
 
@@ -105,7 +105,7 @@ fn project_segment_to_ground(
     let end_in_ground = camera_matrix.pixel_to_ground(end)?;
 
     let midpoint = center(start, end);
-    let pixel_radius = 100.0 * camera_matrix.get_pixel_radius(0.01, midpoint, point![640, 480])?;
+    let pixel_radius = 100.0 * camera_matrix.get_pixel_radius(0.01, midpoint)?;
     let line_width = 3.0 / pixel_radius;
 
     Ok(SegmentInGround {

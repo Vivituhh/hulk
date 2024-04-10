@@ -1,5 +1,6 @@
 use approx_derive::{AbsDiffEq, RelativeEq};
 use serde::{Deserialize, Serialize};
+use serialize_hierarchy::SerializeHierarchy;
 
 macro_rules! generate_coordinate_system {
     ($($(#[$doc:meta])* $i:ident),* $(,)?) => {
@@ -16,6 +17,7 @@ macro_rules! generate_coordinate_system {
                 Serialize,
                 RelativeEq,
                 AbsDiffEq,
+                SerializeHierarchy
             )]
             #[abs_diff_eq(epsilon = "f32")]
             $(#[$doc])*
@@ -40,6 +42,11 @@ generate_coordinate_system!(
     /// Origin: center of the field
     /// X axis pointing towards the opponent goal
     Field,
+    /// 3D Intrinsic coordinate system of the camera.
+    ///
+    /// Origin: center of the camera model
+    /// X axis pointing right, Y axis pointing down, Z axis pointing forward
+    NormalizedDeviceCoordinates,
     /// 3D coordinate system centered on the camera
     ///
     /// See [official documentation](http://doc.aldebaran.com/2-8/family/nao_technical/video_naov6.html)

@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 use color_eyre::Result;
+use projection::{camera_matrix::CameraMatrix, horizon::Horizon};
 use serde::{Deserialize, Serialize};
 
 use context_attribute::context;
@@ -8,10 +9,8 @@ use coordinate_systems::{Field, Ground};
 use framework::{AdditionalOutput, MainOutput};
 use linear_algebra::{point, Isometry2, Transform};
 use types::{
-    camera_matrix::CameraMatrix,
     color::{Intensity, Rgb, RgbChannel, YCbCr444},
     field_color::FieldColor,
-    horizon::Horizon,
     image_segments::{EdgeType, ImageSegments, ScanGrid, ScanLine, Segment},
     interpolated::Interpolated,
     limb::{is_above_limbs, Limb, ProjectedLimbs},
@@ -84,7 +83,9 @@ impl ImageSegmenter {
 
         let horizon = context
             .camera_matrix
-            .map_or(Horizon::default(), |camera_matrix| camera_matrix.horizon);
+            .and_then(|camera_matrix| camera_matrix.horizon)
+            .unwrap_or_default();
+
         let scan_grid = new_grid(
             context.image,
             &horizon,
