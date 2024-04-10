@@ -250,7 +250,7 @@ impl Widget for &mut MapPanel {
             .generic_paint(&painter, ground_to_field, &field_dimensions);
         let _ = self
             .referee_position
-            .generic_paint(&painter, ground_to_field & field_dimensions);
+            .generic_paint(&painter, ground_to_field, &field_dimensions);
         let _ =
             self.human_pose_detection
                 .generic_paint(&painter, ground_to_field, &field_dimensions);
