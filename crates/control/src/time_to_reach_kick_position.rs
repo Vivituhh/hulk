@@ -1,9 +1,14 @@
-use std::time::Duration;
+use std::{f32::consts::FRAC_1_PI, time::Duration};
 
 use color_eyre::Result;
 use framework::AdditionalOutput;
+use linear_algebra::Vector2;
 use serde::{Deserialize, Serialize};
-use types::{parameters::BehaviorParameters, planned_path::PathSegment};
+use types::{
+    motion_command::{MotionCommand, OrientationMode},
+    parameters::BehaviorParameters,
+    planned_path::PathSegment,
+};
 
 #[derive(Deserialize, Serialize)]
 pub struct TimeToReachKickPosition {}
@@ -12,7 +17,9 @@ use context_attribute::context;
 #[context]
 pub struct CycleContext {
     dribble_path: Input<Option<Vec<PathSegment>>, "dribble_path?">,
+    motion_command: Input<MotionCommand, "motion_command">,
 
+    time_to_turn: AdditionalOutput<Duration, "time_to_turn">,
     time_to_reach_kick_position_output:
         AdditionalOutput<Option<Duration>, "time_to_reach_kick_position_output">,
 
@@ -57,6 +64,27 @@ impl TimeToReachKickPosition {
                     .sum()
             })
             .map(Duration::from_secs_f32);
+        let turning_angle = match context.motion_command {
+            MotionCommand::Walk {
+                orientation_mode: OrientationMode::Override(orientation),
+                ..
+            } => Some(orientation.angle().abs()),
+            _ => {
+                let turning_angle_towards_path = match context.dribble_path {
+                    Some(path) => match path.first() {
+                        Some(PathSegment::LineSegment(line_segment)) => {
+                            Some(line_segment.1.coords().angle(Vector2::x_axis()).abs())
+                        }
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                turning_angle_towards_path
+            }
+        };
+        let time_to_turn = Duration::from_secs_f32(turning_angle.map_or(0.0, |angle| {
+            angle * FRAC_1_PI * context.configuration.path_planning.half_turning_time
+        }));
         let time_to_reach_kick_position = walk_time.map(|walk_time| {
             [
                 walk_time,
@@ -66,11 +94,13 @@ impl TimeToReachKickPosition {
                 *context
                     .stand_up_front_estimated_remaining_duration
                     .unwrap_or(&Duration::ZERO),
+                time_to_turn,
             ]
             .into_iter()
             .fold(Duration::ZERO, Duration::saturating_add)
         });
 
+        context.time_to_turn.fill_if_subscribed(|| time_to_turn);
         context
             .time_to_reach_kick_position_output
             .fill_if_subscribed(|| time_to_reach_kick_position);
