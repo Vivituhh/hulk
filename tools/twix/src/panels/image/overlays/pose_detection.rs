@@ -41,7 +41,7 @@ impl Overlay for PoseDetection {
 
     fn new(nao: Arc<Nao>, selected_cycler: Cycler) -> Self {
         if selected_cycler != Cycler::VisionTop {
-            panic!("PoseDetection only works with the vision top cycler instance!");
+            // panic!("PoseDetection only works with the vision top cycler instance!");
         }
 
         Self {
