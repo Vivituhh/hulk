@@ -818,7 +818,7 @@
     },
     "minimum_bottom_focus_pitch": 0.2,
     "glance_center_offset_in_image": [0.0, -100.0],
-    "pixel_target": {
+    "image_region": {
       "bottom": [0.5, 0.7],
       "center": [0.5, 0.5]
     }

@@ -101,7 +101,7 @@ pub enum HeadMotion {
     SearchForLostBall,
     LookAt {
         target: Point2<Ground>,
-        pixel_target: ImageRegionTarget,
+        image_region_target: ImageRegionTarget,
         camera: Option<CameraPosition>,
     },
     LookLeftAndRightOf {

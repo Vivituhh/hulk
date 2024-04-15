@@ -12,7 +12,7 @@ use types::{
 pub fn execute(
     world_state: &WorldState,
     expected_referee_position: Option<&Point2<Ground>>,
-    pixel_target: ImageRegionTarget,
+    image_region_target: ImageRegionTarget,
 ) -> Option<MotionCommand> {
     let (Some(filtered_game_controller_state), Some(expected_referee_position)) = (
         world_state.filtered_game_controller_state,
@@ -38,7 +38,7 @@ pub fn execute(
                 | PlayerNumber::Five
                 | PlayerNumber::Three => HeadMotion::LookAt {
                     target: *expected_referee_position,
-                    pixel_target,
+                    image_region_target,
                     camera: Some(CameraPosition::Top),
                 },
                 _ => HeadMotion::ZeroAngles,
@@ -46,7 +46,7 @@ pub fn execute(
             false => match world_state.robot.player_number {
                 PlayerNumber::One | PlayerNumber::Two | PlayerNumber::Six => HeadMotion::LookAt {
                     target: *expected_referee_position,
-                    pixel_target,
+                    image_region_target,
                     camera: Some(CameraPosition::Top),
                 },
                 _ => HeadMotion::ZeroAngles,

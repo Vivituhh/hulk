@@ -16,7 +16,7 @@ impl<'cycle> LookAction<'cycle> {
     pub fn execute(&self) -> HeadMotion {
         HeadMotion::LookAt {
             target: self.world_state.position_of_interest,
-            pixel_target: ImageRegionTarget::Center,
+            image_region_target: ImageRegionTarget::Center,
             camera: None,
         }
     }

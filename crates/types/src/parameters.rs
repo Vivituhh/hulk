@@ -180,11 +180,11 @@ pub struct LookAtParameters {
     pub glance_angle: f32,
     pub glance_direction_toggle_interval: Duration,
     pub minimum_bottom_focus_pitch: f32,
-    pub pixel_target: PixelTargetParameters,
+    pub image_region_parameters: ImageRegionParameters,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, SerializeHierarchy)]
-pub struct PixelTargetParameters {
+pub struct ImageRegionParameters {
     pub bottom: Point2<NormalizedPixel>,
     pub center: Point2<NormalizedPixel>,
 }

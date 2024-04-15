@@ -14,7 +14,7 @@ use types::{
     cycle_time::CycleTime,
     joints::{head::HeadJoints, Joints},
     motion_command::{GlanceDirection, HeadMotion, ImageRegionTarget, MotionCommand},
-    parameters::PixelTargetParameters,
+    parameters::ImageRegionParameters,
     sensor_data::SensorData,
 };
 
@@ -36,7 +36,7 @@ pub struct CycleContext {
     sensor_data: Input<SensorData, "sensor_data">,
 
     glance_angle: Parameter<f32, "look_at.glance_angle">,
-    pixel_target_parameters: Parameter<PixelTargetParameters, "look_at.pixel_target">,
+    image_region_parameters: Parameter<ImageRegionParameters, "look_at.image_region">,
     glance_direction_toggle_interval:
         Parameter<Duration, "look_at.glance_direction_toggle_interval">,
     minimum_bottom_focus_pitch: Parameter<f32, "look_at.minimum_bottom_focus_pitch">,
@@ -92,12 +92,12 @@ impl LookAt {
             self.last_glance_direction_toggle = Some(cycle_start_time);
         }
 
-        let (target, pixel_target, camera) = match *head_motion {
+        let (target, image_region_target, camera) = match *head_motion {
             HeadMotion::LookAt {
                 target,
-                pixel_target,
+                image_region_target,
                 camera,
-            } => (target, pixel_target, camera),
+            } => (target, image_region_target, camera),
             HeadMotion::LookLeftAndRightOf { target } => {
                 let left_right_shift = vector![
                     0.0,
@@ -130,8 +130,8 @@ impl LookAt {
                     target,
                     camera_matrix.head_to_camera * ground_to_zero_head,
                     camera_matrix,
-                    pixel_target,
-                    *context.pixel_target_parameters,
+                    image_region_target,
+                    *context.image_region_parameters,
                 )
             }
             None => look_at(
@@ -141,7 +141,7 @@ impl LookAt {
                 ImageRegionTarget::default(),
                 target,
                 *context.minimum_bottom_focus_pitch,
-                *context.pixel_target_parameters,
+                *context.image_region_parameters,
             ),
         };
 
@@ -155,10 +155,10 @@ fn look_at(
     joint_angles: Joints<f32>,
     ground_to_zero_head: Isometry3<Ground, Head>,
     camera_matrices: &CameraMatrices,
-    pixel_target: ImageRegionTarget,
+    image_region_target: ImageRegionTarget,
     target: Point2<Ground>,
     minimum_bottom_focus_pitch: f32,
-    pixel_target_parameters: PixelTargetParameters,
+    image_region_parameters: ImageRegionParameters,
 ) -> HeadJoints<f32> {
     let head_to_top_camera = camera_matrices.top.head_to_camera;
     let head_to_bottom_camera = camera_matrices.bottom.head_to_camera;
@@ -167,15 +167,15 @@ fn look_at(
         target,
         head_to_top_camera * ground_to_zero_head,
         &camera_matrices.top,
-        pixel_target,
-        pixel_target_parameters,
+        image_region_target,
+        image_region_parameters,
     );
     let bottom_focus_angles = look_at_with_camera(
         target,
         head_to_bottom_camera * ground_to_zero_head,
         &camera_matrices.bottom,
-        pixel_target,
-        pixel_target_parameters,
+        image_region_target,
+        image_region_parameters,
     );
 
     let pitch_movement_top = (top_focus_angles.pitch - joint_angles.head.pitch).abs();
@@ -194,12 +194,12 @@ fn look_at_with_camera(
     target: Point2<Ground>,
     ground_to_zero_camera: Isometry3<Ground, Camera>,
     camera_matrix: &CameraMatrix,
-    pixel_target: ImageRegionTarget,
-    pixel_target_parameters: PixelTargetParameters,
+    image_region_target: ImageRegionTarget,
+    image_region_parameters: ImageRegionParameters,
 ) -> HeadJoints<f32> {
-    let pixel_target = match pixel_target {
-        ImageRegionTarget::Center => pixel_target_parameters.center,
-        ImageRegionTarget::Bottom => pixel_target_parameters.bottom,
+    let pixel_target = match image_region_target {
+        ImageRegionTarget::Center => image_region_parameters.center,
+        ImageRegionTarget::Bottom => image_region_parameters.bottom,
     };
 
     let pixel_target = point![
