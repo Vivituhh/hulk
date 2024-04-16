@@ -1,4 +1,7 @@
-use std::time::{Duration, SystemTime};
+use std::{
+    alloc::System,
+    time::{Duration, SystemTime},
+};
 
 use color_eyre::Result;
 use context_attribute::context;
@@ -23,7 +26,6 @@ pub struct CycleContext {
     camera_position: Parameter<CameraPosition, "image_receiver.$cycler_instance.camera_position">,
 
     last_cycle_time: AdditionalOutput<Duration, "cycle_time">,
-    image_waiting_time: AdditionalOutput<Duration, "image_waiting_time">,
 }
 
 #[context]
@@ -48,20 +50,11 @@ impl ImageReceiver {
             now.duration_since(self.last_cycle_start)
                 .expect("time ran backwards")
         });
-        let earlier = context.hardware_interface.get_now();
         let image = context
             .hardware_interface
             .read_from_camera(*context.camera_position)?;
 
-        context.image_waiting_time.fill_if_subscribed(|| {
-            context
-                .hardware_interface
-                .get_now()
-                .duration_since(earlier)
-                .expect("time ran backwards")
-        });
         self.last_cycle_start = context.hardware_interface.get_now();
-
         Ok(MainOutputs {
             image: image.into(),
         })
