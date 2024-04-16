@@ -87,8 +87,8 @@ pub struct Overlays {
     pub penalty_boxes: EnabledOverlay<PenaltyBoxes>,
     pub feet_detection: EnabledOverlay<FeetDetection>,
     pub field_border: EnabledOverlay<FieldBorder>,
-    pub pose_detection: EnabledOverlay<PoseDetection>,
     pub limb_projector: EnabledOverlay<LimbProjector>,
+    pub pose_detection: EnabledOverlay<PoseDetection>,
 }
 
 impl Overlays {
