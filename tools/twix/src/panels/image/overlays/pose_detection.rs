@@ -1,7 +1,7 @@
-use std::{str::FromStr, sync::Arc};
+use std::sync::Arc;
 
 use color_eyre::Result;
-use communication::client::{Cycler, CyclerOutput};
+use communication::client::{Cycler, CyclerOutput, Output};
 use coordinate_systems::Pixel;
 use eframe::{
     egui::{Align2, FontId},
@@ -31,10 +31,9 @@ const POSE_SKELETON: [(usize, usize); 16] = [
     (14, 16),
 ];
 
-pub const KCONF: f32 = 0.1;
-
 pub struct PoseDetection {
     human_poses: Option<ValueBuffer>,
+    keypoint_confidence_threshold: Option<ValueBuffer>,
 }
 
 impl Overlay for PoseDetection {
@@ -43,30 +42,40 @@ impl Overlay for PoseDetection {
     fn new(nao: Arc<Nao>, selected_cycler: Cycler) -> Self {
         if selected_cycler != Cycler::VisionTop {
             warn!("PoseDetection only works with the vision top cycler instance!");
-            return Self { human_poses: None };
+            return Self {
+                human_poses: None,
+                keypoint_confidence_threshold: None,
+            };
         };
         Self {
-            human_poses: Some(
-                nao.subscribe_output(
-                    CyclerOutput::from_str("DetectionTop.main_outputs.human_poses")
-                        .expect("Failed to subscribe to cycler"),
-                ),
+            human_poses: Some(nao.subscribe_output(CyclerOutput {
+                cycler: Cycler::DetectionTop,
+                output: Output::Main {
+                    path: "human_poses".to_string(),
+                },
+            })),
+            keypoint_confidence_threshold: Some(
+                nao.subscribe_parameter("detection.detection_top.keypoint_confidence_threshold"),
             ),
         }
     }
 
     fn paint(&self, painter: &crate::twix_painter::TwixPainter<Pixel>) -> Result<()> {
-        let Some(buffer) = self.human_poses.as_ref() else {
+        let (Some(human_poses), Some(keypoint_confidence_threshold)) = (
+            self.human_poses.as_ref(),
+            self.keypoint_confidence_threshold.as_ref(),
+        ) else {
             return Ok(());
         };
-        let poses: Vec<HumanPose> = buffer.require_latest()?;
+        let human_poses: Vec<HumanPose> = human_poses.require_latest()?;
+        let keypoint_confidence_threshold: f32 = keypoint_confidence_threshold.require_latest()?;
 
-        for pose in poses {
+        for pose in human_poses {
             let keypoints: [Keypoint; 17] = pose.keypoints.into();
 
             // draw keypoints
             for keypoint in keypoints.iter() {
-                if keypoint.confidence < KCONF {
+                if keypoint.confidence < keypoint_confidence_threshold {
                     continue;
                 }
                 painter.circle_stroke(keypoint.point, 5.0, Stroke::new(2.0, Color32::BLUE));
@@ -82,12 +91,18 @@ impl Overlay for PoseDetection {
 
             // draw skeleton
             for (idx1, idx2) in POSE_SKELETON {
-                let kpt1 = &keypoints[idx1];
-                let kpt2 = &keypoints[idx2];
-                if kpt1.confidence < KCONF || kpt2.confidence < KCONF {
+                let keypoint1 = &keypoints[idx1];
+                let keypoint2 = &keypoints[idx2];
+                if keypoint1.confidence < keypoint_confidence_threshold
+                    || keypoint2.confidence < keypoint_confidence_threshold
+                {
                     continue;
                 };
-                painter.line_segment(kpt1.point, kpt2.point, Stroke::new(2.0, Color32::GREEN))
+                painter.line_segment(
+                    keypoint1.point,
+                    keypoint2.point,
+                    Stroke::new(2.0, Color32::GREEN),
+                )
             }
         }
         Ok(())
