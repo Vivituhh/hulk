@@ -3,10 +3,10 @@
     "detection_top": {
       "enable": true,
       "intersection_over_union_threshold": 0.45,
-      "distance_to_referee_position_threshold": 1.0,
+      "distance_to_referee_position_threshold": 2.0,
       "keypoint_confidence_threshold": 0.2,
       "shoulder_angle_threshold": 0.2,
-      "foot_z_offset": 0.1,
+      "foot_z_offset": 0.2,
       "normed_expected_referee_position": [0.0, 1.0]
     }
   },

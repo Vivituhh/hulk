@@ -96,37 +96,6 @@ impl RefereePoseDetectionFilter {
 
         let mut temporary_pose_detection_times = self.pose_detection_times.clone();
 
-        let temporary_messages: Vec<_> = spl_messages
-            .temporary
-            .iter()
-            .flat_map(|(time, messages)| messages.iter().map(|message| (*time, message)))
-            .filter_map(|(time, message)| match message {
-                IncomingMessage::GameController(_) => None,
-                IncomingMessage::Spl(message) => Some((time, message)),
-            })
-            .collect();
-
-        for (time, message) in temporary_messages {
-            if message.over_arms_pose_detected {
-                temporary_pose_detection_times[message.player_number as usize] = Some(time);
-            }
-        }
-
-        let temporary_own_detected_pose_time = detected_referee_pose_type
-            .temporary
-            .iter()
-            .flat_map(|(time, pose_types)| pose_types.iter().map(|pose_type| (*time, pose_type)))
-            .filter_map(|(time, pose_type)| match pose_type {
-                PoseType::OverheadArms => Some(time),
-                _ => None,
-            })
-            .last();
-
-        if temporary_own_detected_pose_time.is_some() {
-            temporary_pose_detection_times[player_number as usize] =
-                temporary_own_detected_pose_time;
-        }
-
         temporary_pose_detection_times
     }
 
