@@ -1,7 +1,4 @@
-use std::{
-    alloc::System,
-    time::{Duration, SystemTime},
-};
+use std::time::{Duration, SystemTime};
 
 use color_eyre::Result;
 use context_attribute::context;
