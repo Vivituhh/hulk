@@ -89,6 +89,7 @@ pub fn collect_hulk_cyclers() -> Result<Cyclers, Error> {
                     "control::referee_pose_detection_filter",
                     "control::sole_pressure_filter",
                     "control::sonar_filter",
+                    "control::search_suggestor",
                     "control::support_foot_estimation",
                     "control::time_to_reach_kick_position",
                     "control::visual_referee_filter",

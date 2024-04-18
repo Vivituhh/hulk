@@ -3,15 +3,6 @@ use serialize_hierarchy::SerializeHierarchy;
 
 #[derive(Debug, Clone, Copy, SerializeHierarchy, Serialize, Deserialize)]
 pub enum Action {
-    Unstiff,
-    SitDown,
-    Penalize,
-    Initial,
-    FallSafely,
-    StandUp,
-    Stand,
-    LookAround,
-    InterceptBall,
     Calibrate,
     DefendGoal,
     DefendKickOff,
