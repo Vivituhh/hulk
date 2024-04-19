@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, VecDeque},
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -23,10 +23,14 @@ use types::{
 #[derive(Deserialize, Serialize)]
 pub struct RefereePoseDetectionFilter {
     detection_times: Players<Option<SystemTime>>,
+    own_detected_above_arm_poses_queue: VecDeque<bool>,
 }
 
 #[context]
-pub struct CreationContext {}
+pub struct CreationContext {
+    referee_pose_queue_length:
+        Parameter<usize, "object_detection.object_detection_top.referee_pose_queue_length">,
+}
 
 #[context]
 pub struct CycleContext {
@@ -48,6 +52,15 @@ pub struct CycleContext {
 
     player_referee_detection_times:
         AdditionalOutput<Players<Option<SystemTime>>, "player_referee_detection_times">,
+
+    referee_pose_queue_length:
+        Parameter<usize, "object_detection.object_detection_top.referee_pose_queue_length">,
+    minimum_number_poses_before_message: Parameter<
+        usize,
+        "object_detection.object_detection_top.minimum_number_poses_before_message",
+    >,
+
+    referee_pose_queue: AdditionalOutput<VecDeque<bool>, "referee_pose_queue">,
 }
 
 #[context]
@@ -57,9 +70,12 @@ pub struct MainOutputs {
 }
 
 impl RefereePoseDetectionFilter {
-    pub fn new(_context: CreationContext) -> Result<Self> {
+    pub fn new(context: CreationContext) -> Result<Self> {
         Ok(Self {
             detection_times: Default::default(),
+            own_detected_above_arm_poses_queue: VecDeque::with_capacity(
+                *context.referee_pose_queue_length,
+            ),
         })
     }
 
@@ -82,6 +98,10 @@ impl RefereePoseDetectionFilter {
             .player_referee_detection_times
             .fill_if_subscribed(|| self.detection_times);
 
+        context
+            .referee_pose_queue
+            .fill_if_subscribed(|| self.own_detected_above_arm_poses_queue.clone());
+
         Ok(MainOutputs {
             is_referee_initial_pose_detected: is_referee_initial_pose_detected.into(),
         })
@@ -100,11 +120,21 @@ impl RefereePoseDetectionFilter {
         let own_detected_pose_times =
             unpack_own_detection_tree(&context.detected_referee_pose_kind.persistent);
 
-        if let Some((time, _)) = own_detected_pose_times
-            .into_iter()
-            .find(|(_, pose_kind)| *pose_kind == PoseKind::AboveHeadArms)
-        {
-            self.detection_times[*context.player_number] = Some(time);
+        for (time, detection) in own_detected_pose_times {
+            if detection == PoseKind::AboveHeadArms {
+                self.own_detected_above_arm_poses_queue.push_front(true);
+                self.detection_times[*context.player_number] = Some(time);
+            }
+        }
+        self.own_detected_above_arm_poses_queue
+            .truncate(*context.referee_pose_queue_length);
+
+        let detected_referee_pose_count = self
+            .own_detected_above_arm_poses_queue
+            .iter()
+            .filter(|x| **x)
+            .count();
+        if detected_referee_pose_count >= *context.minimum_number_poses_before_message {
             send_own_detection_message(
                 context.hardware_interface.clone(),
                 *context.player_number,
@@ -112,6 +142,7 @@ impl RefereePoseDetectionFilter {
                 *context.time_to_reach_kick_position,
             )?;
         }
+
         Ok(())
     }
 }
