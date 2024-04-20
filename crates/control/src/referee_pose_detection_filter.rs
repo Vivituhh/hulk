@@ -67,6 +67,7 @@ pub struct CycleContext {
 #[derive(Default)]
 pub struct MainOutputs {
     pub is_referee_initial_pose_detected: MainOutput<bool>,
+    pub is_own_referee_initial_pose_detected: MainOutput<bool>,
 }
 
 impl RefereePoseDetectionFilter {
@@ -85,7 +86,7 @@ impl RefereePoseDetectionFilter {
     ) -> Result<MainOutputs> {
         let cycle_start_time = context.cycle_time.start_time;
 
-        self.update(&context)?;
+        let is_own_referee_initial_pose_detected = self.update(&context)?;
 
         let is_referee_initial_pose_detected = decide(
             self.detection_times,
@@ -104,10 +105,11 @@ impl RefereePoseDetectionFilter {
 
         Ok(MainOutputs {
             is_referee_initial_pose_detected: is_referee_initial_pose_detected.into(),
+            is_own_referee_initial_pose_detected: is_own_referee_initial_pose_detected.into(),
         })
     }
 
-    fn update(&mut self, context: &CycleContext<impl NetworkInterface>) -> Result<()> {
+    fn update(&mut self, context: &CycleContext<impl NetworkInterface>) -> Result<bool> {
         let time_tagged_persistent_messages =
             unpack_message_tree(&context.network_message.persistent);
 
@@ -120,12 +122,12 @@ impl RefereePoseDetectionFilter {
         let own_detected_pose_times =
             unpack_own_detection_tree(&context.detected_referee_pose_kind.persistent);
 
-        for (time, detection) in own_detected_pose_times {
-            if detection == PoseKind::AboveHeadArms {
-                self.own_detected_above_arm_poses_queue.push_front(true);
-                self.detection_times[*context.player_number] = Some(time);
-            }
+        for (_, detection) in own_detected_pose_times {
+            self.own_detected_above_arm_poses_queue.push_front(
+                detection.map_or(false, |pose_kind| pose_kind == PoseKind::AboveHeadArms),
+            );
         }
+
         self.own_detected_above_arm_poses_queue
             .truncate(*context.referee_pose_queue_length);
 
@@ -134,7 +136,9 @@ impl RefereePoseDetectionFilter {
             .iter()
             .filter(|x| **x)
             .count();
+
         if detected_referee_pose_count >= *context.minimum_number_poses_before_message {
+            self.detection_times[*context.player_number] = Some(context.cycle_time.start_time);
             send_own_detection_message(
                 context.hardware_interface.clone(),
                 *context.player_number,
@@ -143,7 +147,7 @@ impl RefereePoseDetectionFilter {
             )?;
         }
 
-        Ok(())
+        Ok(detected_referee_pose_count >= *context.minimum_number_poses_before_message)
     }
 }
 
@@ -193,11 +197,14 @@ fn unpack_message_tree(
 
 fn unpack_own_detection_tree(
     pose_kind_tree: &BTreeMap<SystemTime, Vec<Option<&PoseKind>>>,
-) -> BTreeMap<SystemTime, PoseKind> {
+) -> BTreeMap<SystemTime, Option<PoseKind>> {
     pose_kind_tree
         .iter()
-        .flat_map(|(time, pose_kinds)| pose_kinds.iter().map(|&pose_kind| (*time, pose_kind)))
-        .filter_map(|(time, pose_kind)| Some(time).zip(pose_kind.cloned()))
+        .flat_map(|(time, pose_kinds)| {
+            pose_kinds
+                .iter()
+                .map(|&pose_kind| (*time, pose_kind.cloned()))
+        })
         .collect()
 }
 
