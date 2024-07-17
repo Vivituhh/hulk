@@ -4,7 +4,7 @@ use communication::messages::TextOrBinary;
 use eframe::egui::Widget;
 use gilrs::{Axis, Button, Gamepad, GamepadId, Gilrs};
 use serde_json::{json, Value};
-use types::step_plan::Step;
+use types::{motion_command::KickVariant, step_plan::Step};
 
 use crate::{nao::Nao, panel::Panel};
 
@@ -54,6 +54,11 @@ impl RemotePanel {
             TextOrBinary::Text(angle),
         )
     }
+
+    fn update_kick(&self, kick: Value) {
+        self.nao
+            .write("injected_motion_command", TextOrBinary::Text(kick))
+    }
 }
 
 impl Widget for &mut RemotePanel {
@@ -102,16 +107,33 @@ impl Widget for &mut RemotePanel {
                 turn,
             };
 
+            let should_kick = dbg!(get_axis_value(gamepad, Axis::DPadX).unwrap_or(1.0)) != 0.0;
+
+            let kick = KickVariant::Forward;
+
+            let in_walk_kick = InWalkKick {
+                head: HeadMotion::Center,
+                left_arm: ArmMotion::Swing,
+                right_arm: ArmMotion::Swing,
+                kick: KickVariant::Forward,
+                kicking_side: Side::Right,
+                strength: 1.0,
+            };
+
             if self.enabled {
                 self.update_step(serde_json::to_value(step).unwrap());
                 self.update_look_at_angle(serde_json::to_value(injected_angle).unwrap());
+                if should_kick {
+                    self.update_kick(serde_json::to_value(in_walk_kick).unwrap());
+                }
             }
 
             ui.vertical(|ui| {
                 let label_1 = ui.label(&format!("{:#?}", step));
                 let label_2 = ui.label(&format!("Head angle: {}", injected_angle));
+                let label_3 = ui.label(&format!("Kick: {} {} ", should_kick, in_walk_kick));
 
-                label_1.union(label_2)
+                label_1.union(label_2).union(label_3)
             })
             .inner
         } else {

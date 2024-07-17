@@ -152,6 +152,7 @@ impl RoleAssignment {
                 }
             }
             new_role = player_roles[*context.player_number];
+            // new_role = Role::Striker;
 
             self.role_initialized = true;
             self.last_received_spl_striker_message = Some(cycle_start_time);

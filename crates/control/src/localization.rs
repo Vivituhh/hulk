@@ -145,8 +145,8 @@ impl Localization {
             game_phase,
             kicking_team,
         ) {
-            (PrimaryState::Ready, PrimaryState::Playing, _, Team::Hulks) => {
-                let initial_pose = if context.player_number == PlayerNumber::Two {
+            (PrimaryState::Ready | PrimaryState::Set, PrimaryState::Playing, _, Team::Hulks) => {
+                let initial_pose = if *context.player_number == PlayerNumber::Two {
                     Pose2::from(point![-0.2, 0.0])
                 } else {
                     Pose2::from(point![-2.0, 0.0])
@@ -159,14 +159,14 @@ impl Localization {
                 self.hypotheses_when_entered_playing
                     .clone_from(&self.hypotheses);
             }
-            (PrimaryState::Ready, PrimaryState::Playing, _, Team::Opponent) => {
-                let initial_pose = if context.player_number == PlayerNumber::Two {
-                    Pose2::from(point![-(context.field_dimensions.length / 2.0), 0.0,])
-                } else {
+            (PrimaryState::Ready| PrimaryState::Set, PrimaryState::Playing, _, Team::Opponent) => {
+                let initial_pose = if *context.player_number == PlayerNumber::Two {
                     Pose2::from(point![
                         -context.field_dimensions.length + (context.field_dimensions.length / 2.0),
                         0.0,
                     ])
+                } else {
+                    Pose2::from(point![-(context.field_dimensions.length / 2.0), 0.0,])
                 };
                 self.hypotheses = vec![ScoredPose::from_isometry(
                     initial_pose,
@@ -227,10 +227,10 @@ impl Localization {
                 self.hypotheses_when_entered_playing
                     .clone_from(&self.hypotheses);
             }
-            (PrimaryState::Set, PrimaryState::Playing, _, _) => {
-                self.hypotheses_when_entered_playing
-                    .clone_from(&self.hypotheses);
-            }
+            // (PrimaryState::Set, PrimaryState::Playing, _, _) => {
+            //     self.hypotheses_when_entered_playing
+            //         .clone_from(&self.hypotheses);
+            // }
             (PrimaryState::Ready, PrimaryState::Penalized, _, _) => {
                 self.time_when_penalized_clicked = Some(context.cycle_time.start_time);
                 match penalty {
