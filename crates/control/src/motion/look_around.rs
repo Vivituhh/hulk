@@ -55,6 +55,16 @@ impl LookAround {
     }
 
     pub fn cycle(&mut self, mut context: CycleContext) -> Result<MainOutputs> {
+        if let Some(injected_head_angle) = context.config.injected_head_angle {
+            return Ok(MainOutputs {
+                look_around: HeadJoints {
+                    yaw: injected_head_angle,
+                    pitch: 0.0,
+                }
+                .into(),
+            });
+        }
+
         if self.last_head_motion != context.motion_command.head_motion()
             || context.motion_selection.dispatching_motion.is_some()
         {

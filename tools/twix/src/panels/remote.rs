@@ -47,14 +47,24 @@ impl RemotePanel {
             TextOrBinary::Text(step),
         )
     }
+
+    fn update_look_at_angle(&self, angle: Value) {
+        self.nao.write(
+            "parameters.look_around.injected_head_angle",
+            TextOrBinary::Text(angle),
+        )
+    }
 }
 
 impl Widget for &mut RemotePanel {
     fn ui(self, ui: &mut eframe::egui::Ui) -> eframe::egui::Response {
+        const MAXIMUM_HEAD_ANGLE: f32 = 1.0;
+
         self.gilrs.inc();
 
         if ui.checkbox(&mut self.enabled, "Enabled (Start)").changed() {
             self.update_step(Value::Null);
+            self.update_look_at_angle(Value::Null);
         };
 
         while let Some(event) = self.gilrs.next_event() {
@@ -75,6 +85,17 @@ impl Widget for &mut RemotePanel {
             let left = -right;
             let turn = -turn_right;
 
+            let right_rotation = gamepad
+                .button_data(Button::RightTrigger2)
+                .map(|button| button.value())
+                .unwrap_or_default();
+            let left_rotation = gamepad
+                .button_data(Button::LeftTrigger2)
+                .map(|button| button.value())
+                .unwrap_or_default();
+
+            let injected_angle = (right_rotation - left_rotation) * MAXIMUM_HEAD_ANGLE;
+
             let step = Step {
                 forward,
                 left,
@@ -83,8 +104,16 @@ impl Widget for &mut RemotePanel {
 
             if self.enabled {
                 self.update_step(serde_json::to_value(step).unwrap());
+                self.update_look_at_angle(serde_json::to_value(injected_angle).unwrap());
             }
-            ui.label(&format!("{:#?}", step))
+
+            ui.vertical(|ui| {
+                let label_1 = ui.label(&format!("{:#?}", step));
+                let label_2 = ui.label(&format!("Head angle: {}", injected_angle));
+
+                label_1.union(label_2)
+            })
+            .inner
         } else {
             ui.label("No controller found")
         }
