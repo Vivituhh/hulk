@@ -146,7 +146,11 @@ impl Localization {
             kicking_team,
         ) {
             (PrimaryState::Ready, PrimaryState::Playing, _, Team::Hulks) => {
-                let initial_pose = Pose2::from(point![-2.0, 0.0,]);
+                let initial_pose = if context.player_number == PlayerNumber::Two {
+                    Pose2::from(point![-0.2, 0.0])
+                } else {
+                    Pose2::from(point![-2.0, 0.0])
+                };
                 self.hypotheses = vec![ScoredPose::from_isometry(
                     initial_pose,
                     *context.initial_hypothesis_covariance,
@@ -156,8 +160,14 @@ impl Localization {
                     .clone_from(&self.hypotheses);
             }
             (PrimaryState::Ready, PrimaryState::Playing, _, Team::Opponent) => {
-                let initial_pose =
-                    Pose2::from(point![-(context.field_dimensions.length / 2.0), 0.0,]);
+                let initial_pose = if context.player_number == PlayerNumber::Two {
+                    Pose2::from(point![-(context.field_dimensions.length / 2.0), 0.0,])
+                } else {
+                    Pose2::from(point![
+                        -context.field_dimensions.length + (context.field_dimensions.length / 2.0),
+                        0.0,
+                    ])
+                };
                 self.hypotheses = vec![ScoredPose::from_isometry(
                     initial_pose,
                     *context.initial_hypothesis_covariance,
