@@ -20,7 +20,7 @@ use types::{
     cycle_time::CycleTime,
     fall_state::FallState,
     field_dimensions::FieldDimensions,
-    filtered_game_controller_state::FilteredGameControllerState,
+    filtered_game_controller_state::{self, FilteredGameControllerState},
     initial_pose::InitialPose,
     messages::{IncomingMessage, OutgoingMessage},
     parameters::SplNetworkParameters,
@@ -152,7 +152,10 @@ impl RoleAssignment {
                 }
             }
             new_role = player_roles[*context.player_number];
-            // new_role = Role::Striker;
+
+            if matches!(context.filtered_game_controller_state.map(|state| state.kicking_team), Team::Hulks){
+                new_role = Role::Striker;
+            }
 
             self.role_initialized = true;
             self.last_received_spl_striker_message = Some(cycle_start_time);
