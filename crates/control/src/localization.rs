@@ -147,9 +147,12 @@ impl Localization {
         ) {
             (PrimaryState::Ready | PrimaryState::Set, PrimaryState::Playing, _, Team::Hulks) => {
                 let initial_pose = if *context.player_number == PlayerNumber::Two {
-                    Pose2::from(point![-0.2, 0.0])
+                    Pose2::from(point![-0.2, -0.5])
                 } else {
-                    Pose2::from(point![-2.0, 0.0])
+                    Pose2::from(point![
+                        -context.field_dimensions.length / 2.0 + context.field_dimensions.penalty_area_length,
+                        context.field_dimensions.penalty_area_width / 2.0
+                    ])
                 };
                 self.hypotheses = vec![ScoredPose::from_isometry(
                     initial_pose,
@@ -159,7 +162,7 @@ impl Localization {
                 self.hypotheses_when_entered_playing
                     .clone_from(&self.hypotheses);
             }
-            (PrimaryState::Ready| PrimaryState::Set, PrimaryState::Playing, _, Team::Opponent) => {
+            (PrimaryState::Ready | PrimaryState::Set, PrimaryState::Playing, _, Team::Opponent) => {
                 let initial_pose = if *context.player_number == PlayerNumber::Two {
                     Pose2::from(point![
                         -context.field_dimensions.length + (context.field_dimensions.length / 2.0),
