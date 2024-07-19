@@ -153,7 +153,7 @@ impl RoleAssignment {
             }
             new_role = player_roles[*context.player_number];
 
-            if matches!(context.filtered_game_controller_state.map(|state| state.kicking_team), Team::Hulks){
+            if matches!(context.filtered_game_controller_state.map(|state| state.kicking_team), Some(Team::Hulks)){
                 new_role = Role::Striker;
             }
 
