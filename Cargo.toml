@@ -164,6 +164,7 @@ ransac = { path = "crates/ransac" }
 regex = "1.6.0"
 repository = { path = "crates/repository" }
 reqwest = { version = "0.11.23", features = ["blocking"] }
+rmp-serde = "*"
 rustfft = "6.0.1"
 semver = "1.0.20"
 serde = { version = "1.0.195", features = ["derive", "rc"] }
@@ -203,9 +204,9 @@ zbus = { version = "3.7.0" }
 
 [patch.crates-io]
 # Pinned to forked serde version since https://github.com/serde-rs/serde/pull/2513 is not merged
-serde = { git = "https://github.com/h3ndrk/serde.git", rev = "4fec5aac7d42a4ac1fc10af037f1c85eba29fa36" }
+serde = { git = "https://github.com/oleflb/serde.git", rev = "73d5e8e404a874ad90023810d634b985bef19478" }
 # Pinned to forked serde version since https://github.com/serde-rs/serde/pull/2513 is not merged
-serde_derive = { git = "https://github.com/h3ndrk/serde.git", rev = "4fec5aac7d42a4ac1fc10af037f1c85eba29fa36" }
+serde_derive = { git = "https://github.com/oleflb/serde.git", rev = "73d5e8e404a874ad90023810d634b985bef19478" }
 
 [profile.incremental]
 inherits = "release"
